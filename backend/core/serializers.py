@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from core.models import (
+    AutorizacaoConsultor,
     Categoria,
     Conta,
     DivisaoDespesa,
@@ -8,6 +9,7 @@ from core.models import (
     MembroGrupo,
     Mesada,
     Orcamento,
+    Recomendacao,
     Transacao,
     Usuario,
 )
@@ -199,3 +201,25 @@ class MesadaSerializer(serializers.ModelSerializer):
         model = Mesada
         fields = ["id", "dependente", "nome_dependente", "grupo", "nome_grupo", "valor", "periodo_recarga", "saldo_atual"]
         read_only_fields = ["id", "nome_dependente", "nome_grupo"]
+
+
+# ─── Consultor ─────────────────────────────────────────────────────────
+
+class AutorizacaoConsultorSerializer(serializers.ModelSerializer):
+    nome_consultor = serializers.CharField(source="consultor.nome", read_only=True)
+    nome_cliente = serializers.CharField(source="cliente.nome", read_only=True)
+
+    class Meta:
+        model = AutorizacaoConsultor
+        fields = ["id", "consultor", "nome_consultor", "cliente", "nome_cliente", "nivel", "status"]
+        read_only_fields = ["id", "nome_consultor", "nome_cliente"]
+
+
+class RecomendacaoSerializer(serializers.ModelSerializer):
+    nome_consultor = serializers.CharField(source="consultor.nome", read_only=True)
+    nome_cliente = serializers.CharField(source="cliente.nome", read_only=True)
+
+    class Meta:
+        model = Recomendacao
+        fields = ["id", "consultor", "nome_consultor", "cliente", "nome_cliente", "texto", "data"]
+        read_only_fields = ["id", "consultor", "nome_consultor", "nome_cliente", "data"]

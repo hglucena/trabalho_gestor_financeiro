@@ -3,7 +3,11 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from core.views import (
+    AutorizacaoConsultorViewSet,
     CategoriaViewSet,
+    ConsultorClienteContasView,
+    ConsultorClienteTransacoesView,
+    ConsultorClientesView,
     ContaViewSet,
     DivisaoDespesaViewSet,
     GrupoViewSet,
@@ -13,6 +17,7 @@ from core.views import (
     MembroGrupoViewSet,
     MesadaViewSet,
     OrcamentoViewSet,
+    RecomendacaoViewSet,
     RegistroView,
     TransacaoViewSet,
     UsuarioViewSet,
@@ -26,6 +31,8 @@ router.register(r"grupos", GrupoViewSet, basename="grupo")
 router.register(r"transacoes", TransacaoViewSet, basename="transacao")
 router.register(r"orcamentos", OrcamentoViewSet, basename="orcamento")
 router.register(r"mesadas", MesadaViewSet, basename="mesada")
+router.register(r"autorizacoes", AutorizacaoConsultorViewSet, basename="autorizacao")
+router.register(r"recomendacoes", RecomendacaoViewSet, basename="recomendacao")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -36,5 +43,8 @@ urlpatterns = [
     path("api/grupos/<int:grupo_pk>/membros/", MembroGrupoViewSet.as_view({"get": "list", "post": "create"}), name="grupo-membros-list"),
     path("api/grupos/<int:grupo_pk>/membros/<int:pk>/", MembroGrupoViewSet.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}), name="grupo-membros-detail"),
     path("api/grupos/<int:grupo_pk>/divisoes/", DivisaoDespesaViewSet.as_view({"get": "list", "post": "create"}), name="grupo-divisoes-list"),
+    path("api/consultor/clientes/", ConsultorClientesView.as_view(), name="consultor-clientes"),
+    path("api/consultor/clientes/<int:cliente_pk>/transacoes/", ConsultorClienteTransacoesView.as_view(), name="consultor-cliente-transacoes"),
+    path("api/consultor/clientes/<int:cliente_pk>/contas/", ConsultorClienteContasView.as_view(), name="consultor-cliente-contas"),
     path("api/", include(router.urls)),
 ]

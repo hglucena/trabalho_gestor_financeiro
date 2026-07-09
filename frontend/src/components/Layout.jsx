@@ -7,11 +7,15 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [temMesada, setTemMesada] = useState(false);
+  const [temConsultoria, setTemConsultoria] = useState(false);
 
   useEffect(() => {
     if (user?.papel_sistema === "admin") return;
     api.get("/mesadas/")
       .then(r => setTemMesada((r.data.results || []).length > 0))
+      .catch(() => {});
+    api.get("/consultor/clientes/")
+      .then(r => setTemConsultoria((r.data.results || r.data || []).length > 0))
       .catch(() => {});
   }, [user]);
 
@@ -32,6 +36,11 @@ export default function Layout() {
             {temMesada && (
               <NavLink to="/painel/dependente" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
                 Mesada
+              </NavLink>
+            )}
+            {temConsultoria && (
+              <NavLink to="/painel/consultor" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
+                Consultoria
               </NavLink>
             )}
             {user?.papel_sistema === "admin" && (

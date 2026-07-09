@@ -76,13 +76,19 @@
 ## Evolução (pós-MVP)
 
 ### Prompt 9 — Visão Dependente / mesada
-- [ ] Mesada com valor, período de recarga e saldo atual
-- [ ] Dependente vê apenas a própria mesada e lança os próprios gastos
-- [ ] Gasto acima do limite bloqueado
-- [ ] Testes e tela no frontend
+- [x] Mesada com valor, período de recarga e saldo atual
+- [x] Dependente vê apenas a própria mesada e lança os próprios gastos
+- [x] Gasto acima do limite bloqueado
+- [x] Testes e tela no frontend
 
 ### Prompt 10 — Visão Consultor
-- [ ] AutorizacaoConsultor liga consultor a cliente (leitura/comentar)
-- [ ] Consultor só enxerga clientes autorizados, modo leitura
-- [ ] Recomendação: só criada por consultor com autorização válida
-- [ ] Testes e tela de carteira de clientes
+- [x] AutorizacaoConsultor liga consultor a cliente (leitura/comentar)
+- [x] Consultor só enxerga clientes autorizados, modo leitura
+- [x] Recomendação: só criada por consultor com autorização válida
+- [x] Testes e tela de carteira de clientes
+
+### Prompt 11 — Revisão final
+- [x] Suíte de testes completa: 99 testes, 0 falhas
+- [x] Dockerfile backend + frontend ok, docker compose up funcional
+- [x] README, DEVLOG e checklist atualizados
+- [x] Todas as regras de acesso do plano (§5) cobertas por teste

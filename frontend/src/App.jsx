@@ -9,6 +9,7 @@ import PainelMembro from "./pages/PainelMembro";
 import PainelGestor from "./pages/PainelGestor";
 import PainelAdmin from "./pages/PainelAdmin";
 import PainelDependente from "./pages/PainelDependente";
+import PainelConsultor from "./pages/PainelConsultor";
 import api from "./api/client";
 
 function PainelDispatcher() {
@@ -37,6 +38,7 @@ export default function App() {
         <Route index element={<PainelDispatcher />} />
         <Route path="gestor" element={<PainelGestor />} />
         <Route path="dependente" element={<PainelDependente />} />
+        <Route path="consultor" element={<PainelConsultor />} />
       </Route>
       <Route path="/admin" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<PainelAdmin />} />

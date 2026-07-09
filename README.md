@@ -1,6 +1,6 @@
 # Finanças Compartilhadas
 
-Aplicação CRUD de finanças pessoais e de grupo, com múltiplas visões de usuário (Membro, Gestor, Administrador).
+Aplicação CRUD de finanças pessoais e de grupo, com cinco visões de usuário (Membro, Gestor, Dependente, Consultor, Administrador).
 
 ## Stack
 
@@ -9,6 +9,16 @@ Aplicação CRUD de finanças pessoais e de grupo, com múltiplas visões de usu
 - **Frontend:** React (Vite) + Tailwind CSS + Recharts
 - **Autenticação:** TokenAuthentication do DRF
 - **Infra:** Docker + docker-compose
+
+## Visões de usuário
+
+| Visão | O que acessa |
+|---|---|
+| **Membro** | Contas, transações e orçamentos pessoais; vê grupos mas não administra |
+| **Gestor** | Painel do grupo: membros, orçamento, despesas divididas, "quem deve a quem" |
+| **Dependente** | Apenas a própria mesada e gastos pessoais; limite de gasto bloqueado |
+| **Consultor** | Carteira de clientes autorizados (modo leitura); cria recomendações (nível comentar) |
+| **Administrador** | Gestão de usuários e categorias padrão; NUNCA acessa finanças alheias |
 
 ## Como subir
 
@@ -57,15 +67,21 @@ Preencha email, nome e senha. O superusuário é criado com `papel_sistema = "ad
 
 | Método | Endpoint | Descrição |
 |---|---|---|
-| `GET` | `/api/health/` | Health check (banco conectado?) |
+| `GET` | `/api/health/` | Health check |
 | `POST` | `/api/registro/` | Cadastro de usuário comum |
 | `POST` | `/api/login/` | Login — retorna token + dados do usuário |
 | `GET` | `/api/me/` | Perfil do usuário logado |
-| `GET` | `/api/contas/` | Contas do usuário |
-| `GET` | `/api/transacoes/` | Transações (próprias + grupos) |
-| `GET` | `/api/grupos/` | Grupos de que participa |
+| `GET/POST` | `/api/contas/` | Contas do usuário |
+| `GET/POST` | `/api/transacoes/` | Transações (próprias + grupos) |
+| `GET/POST` | `/api/grupos/` | Grupos de que participa |
 | `GET` | `/api/grupos/{id}/quem_deve_a_quem/` | Saldo líquido por membro |
 | `GET` | `/api/grupos/{id}/orcamento_resumo/` | Previsto × realizado por categoria |
+| `GET/POST` | `/api/mesadas/` | Mesadas (gestor/dependente) |
+| `GET/POST` | `/api/autorizacoes/` | Autorizações de consultor |
+| `GET/POST` | `/api/recomendacoes/` | Recomendações de consultor |
+| `GET` | `/api/consultor/clientes/` | Clientes autorizados do consultor |
+| `GET` | `/api/consultor/clientes/{id}/transacoes/` | Transações do cliente (leitura) |
+| `GET` | `/api/consultor/clientes/{id}/contas/` | Contas do cliente (leitura) |
 
 ## Rodar migrações
 
@@ -78,6 +94,8 @@ docker compose exec backend python manage.py migrate
 ```bash
 docker compose exec backend python manage.py test
 ```
+
+**99 testes, 0 falhas.**
 
 ## Resetar o banco
 

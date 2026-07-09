@@ -12,6 +12,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from core.models import (
+    AutorizacaoConsultor,
     Categoria,
     Conta,
     DivisaoDespesa,
@@ -19,11 +20,15 @@ from core.models import (
     MembroGrupo,
     Mesada,
     Orcamento,
+    Recomendacao,
     Transacao,
     Usuario,
 )
 from core.permissions import (
     IsAdminOnly,
+    IsAutorizacaoOwner,
+    IsConsultorAutorizado,
+    IsConsultorPodeComentar,
     IsDonoOuGestorDaMesada,
     IsGestorDaMesada,
     IsGestorDoGrupoByKwarg,
@@ -34,6 +39,7 @@ from core.permissions import (
     NaoAdmin,
 )
 from core.serializers import (
+    AutorizacaoConsultorSerializer,
     CadastroSerializer,
     CategoriaAdminSerializer,
     CategoriaSerializer,
@@ -43,6 +49,7 @@ from core.serializers import (
     MembroGrupoSerializer,
     MesadaSerializer,
     OrcamentoSerializer,
+    RecomendacaoSerializer,
     TransacaoCreateSerializer,
     TransacaoSerializer,
     UsuarioAdminSerializer,
@@ -410,3 +417,76 @@ class MesadaViewSet(viewsets.ModelViewSet):
         if mesada.saldo_atual == 0:
             mesada.saldo_atual = mesada.valor
             mesada.save(update_fields=["saldo_atual"])
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Consultor
+# ══════════════════════════════════════════════════════════════════════════
+
+class AutorizacaoConsultorViewSet(viewsets.ModelViewSet):
+    serializer_class = AutorizacaoConsultorSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin]
+
+    def get_queryset(self):
+        user = self.request.user
+        return AutorizacaoConsultor.objects.filter(
+            Q(consultor=user) | Q(cliente=user)
+        )
+
+    def get_permissions(self):
+        if self.action in ("update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), NaoAdmin(), IsAutorizacaoOwner()]
+        return [permissions.IsAuthenticated(), NaoAdmin()]
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class RecomendacaoViewSet(viewsets.ModelViewSet):
+    serializer_class = RecomendacaoSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin]
+
+    def get_queryset(self):
+        user = self.request.user
+        return Recomendacao.objects.filter(
+            Q(consultor=user) | Q(cliente=user)
+        ).order_by("-data")
+
+    def get_permissions(self):
+        if self.action in ("create",):
+            return [permissions.IsAuthenticated(), NaoAdmin(), IsConsultorPodeComentar()]
+        if self.action in ("update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), NaoAdmin(), IsConsultorPodeComentar()]
+        return [permissions.IsAuthenticated(), NaoAdmin()]
+
+    def perform_create(self, serializer):
+        serializer.save(consultor=self.request.user)
+
+
+class ConsultorClientesView(generics.ListAPIView):
+    serializer_class = UsuarioSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin]
+
+    def get_queryset(self):
+        return Usuario.objects.filter(
+            autorizacoes_como_cliente__consultor=self.request.user,
+            autorizacoes_como_cliente__status=True,
+        ).distinct()
+
+
+class ConsultorClienteTransacoesView(generics.ListAPIView):
+    serializer_class = TransacaoSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin, IsConsultorAutorizado]
+
+    def get_queryset(self):
+        cliente_id = self.kwargs["cliente_pk"]
+        return Transacao.objects.filter(usuario_id=cliente_id).order_by("-data")
+
+
+class ConsultorClienteContasView(generics.ListAPIView):
+    serializer_class = ContaSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin, IsConsultorAutorizado]
+
+    def get_queryset(self):
+        cliente_id = self.kwargs["cliente_pk"]
+        return Conta.objects.filter(usuario_id=cliente_id)

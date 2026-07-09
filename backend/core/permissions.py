@@ -1,6 +1,6 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
-from core.models import MembroGrupo
+from core.models import AutorizacaoConsultor, MembroGrupo
 
 
 class IsOwner(BasePermission):
@@ -155,3 +155,46 @@ class IsDonoOuGestorDaMesada(BasePermission):
         return MembroGrupo.objects.filter(
             grupo=obj.grupo, usuario=request.user, papel_no_grupo="responsavel"
         ).exists()
+
+
+class IsConsultorAutorizado(BasePermission):
+    def has_permission(self, request, view):
+        if request.user.papel_sistema == "admin":
+            return False
+        cliente_id = view.kwargs.get("cliente_pk") or request.data.get("cliente")
+        if not cliente_id:
+            return False
+        return AutorizacaoConsultor.objects.filter(
+            consultor=request.user, cliente_id=cliente_id, status=True
+        ).exists()
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.papel_sistema == "admin":
+            return False
+        cliente_id = getattr(obj, "usuario_id", None)
+        if not cliente_id:
+            return False
+        return AutorizacaoConsultor.objects.filter(
+            consultor=request.user, cliente_id=cliente_id, status=True
+        ).exists()
+
+
+class IsConsultorPodeComentar(BasePermission):
+    def has_permission(self, request, view):
+        if request.user.papel_sistema == "admin":
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        cliente_id = view.kwargs.get("cliente_pk") or request.data.get("cliente")
+        if not cliente_id:
+            return False
+        return AutorizacaoConsultor.objects.filter(
+            consultor=request.user, cliente_id=cliente_id, status=True, nivel="comentar"
+        ).exists()
+
+
+class IsAutorizacaoOwner(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.user.papel_sistema == "admin":
+            return False
+        return obj.cliente_id == request.user.id
