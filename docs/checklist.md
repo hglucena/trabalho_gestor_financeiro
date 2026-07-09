@@ -49,11 +49,11 @@
 - [ ] Orçamento do grupo: previsto × realizado por categoria
 
 ## Prompt 6 — Testes automáticos
-- [ ] Testes de acesso e isolamento (Membro, Gestor, Admin)
-- [ ] Testes de integridade (soma das partes, FK inválidas)
-- [ ] Testes de CRUD básico por entidade
-- [ ] Comando único: `docker compose exec backend python manage.py test`
-- [ ] Atualizar DEVLOG.md com bugs encontrados pelos testes
+- [x] Testes de acesso e isolamento (Membro, Gestor, Admin)
+- [x] Testes de integridade (soma das partes, FK inválidas)
+- [x] Testes de CRUD básico por entidade
+- [x] Comando único: `docker compose exec backend python manage.py test`
+- [x] Atualizar DEVLOG.md com bugs encontrados pelos testes
 
 ## Prompt 7 — Frontend React
 - [ ] Serviço `frontend` no docker-compose

@@ -61,15 +61,27 @@
 
 ## Prompt 6: Testes automáticos
 
-**Resultado final: 59 testes, 0 falhas, 0 erros.**
+**Resultado final: 67 testes, 0 falhas, 0 erros.**
 
 ```
 test_auth.py          —  8 testes (registro, login, /me/, superuser)
 test_permissions.py   — 20 testes (isolamento Membro/Gestor/Admin)
 test_crud.py          — 25 testes (CRUD por entidade)
-test_integrity.py     —  2 testes (validações de modelo)
+test_integrity.py     — 10 testes (invariante soma, FK, validações modelo)
 test_business.py      —  4 testes (regras de negócio)
 ```
+
+**Cobertura dos critérios do plano (§5 e §6):**
+
+| Critério | Teste |
+|---|---|
+| Usuário só acessa próprias transações | `test_outro_nao_ve_contas_do_gestor`, `test_membro_nao_edita_conta_gestor` |
+| Admin nunca acessa finanças | `test_admin_nao_ve_transacoes`, `test_admin_nao_ve_contas`, `test_admin_nao_cria_conta` |
+| Responsável vê grupo, não finanças pessoais | `test_membro_nao_ve_transacao_pessoal_gestor`, `test_membro_ve_transacao_do_grupo` |
+| Sem token → negado | `test_sem_token_negado` |
+| Só responsável administra o grupo | `test_membro_nao_edita_grupo`, `test_membro_nao_deleta_grupo`, `test_membro_nao_adiciona_membro` |
+| Despesa dividida: soma = total | `test_divisao_soma_diferente_valor_recusada` (serializer), `test_divisao_soma_exata_aceita` |
+| Transação → conta/categoria válidas | `test_transacao_conta_de_outro_usuario`, `test_transacao_categoria_pessoal_de_outro_usuario` |
 
 **Observações sobre o processo de teste:**
 - Os testes de permissão capturaram os bugs 1-4 do Prompt 4 (listados acima) — todos já corrigidos
