@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import Layout from "./components/Layout";
@@ -7,10 +8,23 @@ import CadastroPage from "./pages/CadastroPage";
 import PainelMembro from "./pages/PainelMembro";
 import PainelGestor from "./pages/PainelGestor";
 import PainelAdmin from "./pages/PainelAdmin";
+import PainelDependente from "./pages/PainelDependente";
+import api from "./api/client";
 
 function PainelDispatcher() {
   const { user } = useAuth();
+  const [temMesada, setTemMesada] = useState(null);
+
+  useEffect(() => {
+    if (user?.papel_sistema === "admin") return;
+    api.get("/mesadas/")
+      .then(r => setTemMesada((r.data.results || []).length > 0))
+      .catch(() => setTemMesada(false));
+  }, [user]);
+
   if (user?.papel_sistema === "admin") return <PainelAdmin />;
+  if (temMesada === null) return <p className="text-gray-400 text-center py-10">Carregando...</p>;
+  if (temMesada) return <PainelDependente />;
   return <PainelMembro />;
 }
 
@@ -22,6 +36,7 @@ export default function App() {
       <Route path="/painel" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<PainelDispatcher />} />
         <Route path="gestor" element={<PainelGestor />} />
+        <Route path="dependente" element={<PainelDependente />} />
       </Route>
       <Route path="/admin" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<PainelAdmin />} />

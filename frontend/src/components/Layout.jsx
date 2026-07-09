@@ -1,9 +1,19 @@
+import { useEffect, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import api from "../api/client";
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [temMesada, setTemMesada] = useState(false);
+
+  useEffect(() => {
+    if (user?.papel_sistema === "admin") return;
+    api.get("/mesadas/")
+      .then(r => setTemMesada((r.data.results || []).length > 0))
+      .catch(() => {});
+  }, [user]);
 
   const handleLogout = () => {
     logout();
@@ -19,6 +29,11 @@ export default function Layout() {
             <NavLink to="/painel" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
               Painel
             </NavLink>
+            {temMesada && (
+              <NavLink to="/painel/dependente" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
+                Mesada
+              </NavLink>
+            )}
             {user?.papel_sistema === "admin" && (
               <NavLink to="/admin" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
                 Admin

@@ -17,12 +17,15 @@ from core.models import (
     DivisaoDespesa,
     Grupo,
     MembroGrupo,
+    Mesada,
     Orcamento,
     Transacao,
     Usuario,
 )
 from core.permissions import (
     IsAdminOnly,
+    IsDonoOuGestorDaMesada,
+    IsGestorDaMesada,
     IsGestorDoGrupoByKwarg,
     IsOwner,
     IsOwnerOrGestorForWrite,
@@ -38,6 +41,7 @@ from core.serializers import (
     DivisaoDespesaSerializer,
     GrupoSerializer,
     MembroGrupoSerializer,
+    MesadaSerializer,
     OrcamentoSerializer,
     TransacaoCreateSerializer,
     TransacaoSerializer,
@@ -159,7 +163,11 @@ class GrupoViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, NaoAdmin]
 
     def get_queryset(self):
-        return Grupo.objects.filter(membros__usuario=self.request.user).distinct()
+        return Grupo.objects.filter(
+            membros__usuario=self.request.user
+        ).exclude(
+            membros__usuario=self.request.user, membros__papel_no_grupo="dependente"
+        ).distinct()
 
     def get_permissions(self):
         if self.action in ("update", "partial_update", "destroy"):
@@ -273,6 +281,11 @@ class TransacaoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        is_dependente = MembroGrupo.objects.filter(
+            usuario=user, papel_no_grupo="dependente"
+        ).exists()
+        if is_dependente:
+            return Transacao.objects.filter(usuario=user).order_by("-data")
         grupos_ids = MembroGrupo.objects.filter(usuario=user).values_list("grupo_id", flat=True)
         return Transacao.objects.filter(
             Q(usuario=user) | Q(grupo_id__in=grupos_ids)
@@ -289,7 +302,26 @@ class TransacaoViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated(), NaoAdmin()]
 
     def perform_create(self, serializer):
-        serializer.save(usuario=self.request.user)
+        user = self.request.user
+        tipo = serializer.validated_data.get("tipo", "")
+        valor = serializer.validated_data.get("valor", 0)
+
+        if tipo == "despesa":
+            mesada = Mesada.objects.filter(dependente=user).first()
+            if mesada:
+                if valor > mesada.saldo_atual:
+                    raise PermissionDenied(
+                        f"Gasto acima do limite da mesada. Saldo disponível: R$ {mesada.saldo_atual}"
+                    )
+
+        transacao = serializer.save(usuario=user)
+
+        if transacao.tipo == "despesa":
+            mesada = Mesada.objects.filter(dependente=user).first()
+            if mesada:
+                mesada.saldo_atual -= transacao.valor
+                mesada.save(update_fields=["saldo_atual"])
+
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -302,6 +334,11 @@ class OrcamentoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        is_dependente = MembroGrupo.objects.filter(
+            usuario=user, papel_no_grupo="dependente"
+        ).exists()
+        if is_dependente:
+            return Orcamento.objects.filter(usuario=user)
         grupos_ids = MembroGrupo.objects.filter(usuario=user).values_list("grupo_id", flat=True)
         return Orcamento.objects.filter(
             Q(usuario=user) | Q(grupo_id__in=grupos_ids)
@@ -336,3 +373,40 @@ class DivisaoDespesaViewSet(viewsets.ModelViewSet):
         return DivisaoDespesa.objects.filter(
             transacao__grupo_id=self.kwargs["grupo_pk"]
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Mesada (Dependente)
+# ══════════════════════════════════════════════════════════════════════════
+
+class MesadaViewSet(viewsets.ModelViewSet):
+    serializer_class = MesadaSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin]
+
+    def get_queryset(self):
+        user = self.request.user
+        is_dependente = MembroGrupo.objects.filter(
+            usuario=user, papel_no_grupo="dependente"
+        ).exists()
+        if is_dependente:
+            return Mesada.objects.filter(dependente=user)
+        grupos_ids = MembroGrupo.objects.filter(
+            usuario=user, papel_no_grupo="responsavel"
+        ).values_list("grupo_id", flat=True)
+        return Mesada.objects.filter(grupo_id__in=grupos_ids)
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [permissions.IsAuthenticated(), NaoAdmin(), IsGestorDaMesada()]
+        return [permissions.IsAuthenticated(), NaoAdmin(), IsDonoOuGestorDaMesada()]
+
+    def perform_create(self, serializer):
+        grupo = serializer.validated_data["grupo"]
+        if not MembroGrupo.objects.filter(
+            grupo=grupo, usuario=self.request.user, papel_no_grupo="responsavel"
+        ).exists():
+            raise PermissionDenied("Apenas o responsável do grupo pode criar mesadas.")
+        mesada = serializer.save()
+        if mesada.saldo_atual == 0:
+            mesada.saldo_atual = mesada.valor
+            mesada.save(update_fields=["saldo_atual"])

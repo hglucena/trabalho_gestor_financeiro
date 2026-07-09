@@ -11,6 +11,7 @@ from core.views import (
     LoginView,
     MeView,
     MembroGrupoViewSet,
+    MesadaViewSet,
     OrcamentoViewSet,
     RegistroView,
     TransacaoViewSet,
@@ -24,6 +25,7 @@ router.register(r"categorias", CategoriaViewSet, basename="categoria")
 router.register(r"grupos", GrupoViewSet, basename="grupo")
 router.register(r"transacoes", TransacaoViewSet, basename="transacao")
 router.register(r"orcamentos", OrcamentoViewSet, basename="orcamento")
+router.register(r"mesadas", MesadaViewSet, basename="mesada")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

@@ -80,7 +80,7 @@ class IsGestorDoGrupoByKwarg(BasePermission):
         if request.method in SAFE_METHODS:
             return MembroGrupo.objects.filter(
                 grupo_id=grupo_id, usuario=request.user
-            ).exists()
+            ).exclude(papel_no_grupo="dependente").exists()
         return MembroGrupo.objects.filter(
             grupo_id=grupo_id, usuario=request.user, papel_no_grupo="responsavel"
         ).exists()
@@ -131,3 +131,27 @@ class IsOwnerOrGrupoMemberRead(BasePermission):
                 grupo_id=obj.grupo_id, usuario=request.user
             ).exists()
         return False
+
+
+class IsGestorDaMesada(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.user.papel_sistema == "admin":
+            return False
+        return MembroGrupo.objects.filter(
+            grupo=obj.grupo, usuario=request.user, papel_no_grupo="responsavel"
+        ).exists()
+
+
+class IsDonoOuGestorDaMesada(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.user.papel_sistema == "admin":
+            return False
+        if request.method in SAFE_METHODS:
+            if obj.dependente_id == request.user.id:
+                return True
+            return MembroGrupo.objects.filter(
+                grupo=obj.grupo, usuario=request.user
+            ).exists()
+        return MembroGrupo.objects.filter(
+            grupo=obj.grupo, usuario=request.user, papel_no_grupo="responsavel"
+        ).exists()

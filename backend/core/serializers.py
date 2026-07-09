@@ -6,6 +6,7 @@ from core.models import (
     DivisaoDespesa,
     Grupo,
     MembroGrupo,
+    Mesada,
     Orcamento,
     Transacao,
     Usuario,
@@ -186,3 +187,15 @@ class OrcamentoSerializer(serializers.ModelSerializer):
         model = Orcamento
         fields = ["id", "usuario", "grupo", "categoria", "nome_categoria", "valor_limite", "periodo"]
         read_only_fields = ["id", "nome_categoria"]
+
+
+# ─── Mesada ────────────────────────────────────────────────────────────
+
+class MesadaSerializer(serializers.ModelSerializer):
+    nome_dependente = serializers.CharField(source="dependente.nome", read_only=True)
+    nome_grupo = serializers.CharField(source="grupo.nome", read_only=True)
+
+    class Meta:
+        model = Mesada
+        fields = ["id", "dependente", "nome_dependente", "grupo", "nome_grupo", "valor", "periodo_recarga", "saldo_atual"]
+        read_only_fields = ["id", "nome_dependente", "nome_grupo"]
