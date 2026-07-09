@@ -114,7 +114,6 @@ class TransacaoSerializer(serializers.ModelSerializer):
 
 
 class TransacaoCreateSerializer(serializers.ModelSerializer):
-    divisoes = DivisaoDespesaSerializer(many=True, required=False)
     dividir_igualmente = serializers.BooleanField(default=False, write_only=True)
     participantes_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
@@ -124,33 +123,34 @@ class TransacaoCreateSerializer(serializers.ModelSerializer):
         model = Transacao
         fields = [
             "id", "conta", "categoria", "tipo", "valor", "descricao",
-            "data", "grupo", "fixa", "divisoes", "dividir_igualmente", "participantes_ids",
+            "data", "grupo", "fixa", "dividir_igualmente", "participantes_ids",
         ]
         read_only_fields = ["id"]
 
     def validate(self, data):
-        divisoes = self.initial_data.get("divisoes", [])
-        dividir = self.initial_data.get("dividir_igualmente", False)
-        participantes = self.initial_data.get("participantes_ids", [])
-        valor = float(data.get("valor", 0))
+        raw = self.initial_data
+        divisoes = raw.get("divisoes") or []
+        dividir = raw.get("dividir_igualmente", False)
+        participantes = raw.get("participantes_ids") or []
+        valor = raw.get("valor", 0)
 
         if dividir and participantes:
             if len(participantes) == 0:
                 raise serializers.ValidationError("Informe ao menos um participante para a divisão.")
         elif divisoes:
-            total_divisoes = sum(float(d.get("valor_devido", 0)) for d in divisoes)
-            if abs(total_divisoes - valor) > 0.01:
+            total_divisoes = sum(float(d["valor_devido"]) for d in divisoes)
+            if abs(total_divisoes - float(valor)) > 0.01:
                 raise serializers.ValidationError(
                     "A soma das partes da divisão deve ser igual ao valor total da transação."
                 )
         return data
 
     def create(self, validated_data):
-        divisoes_data = self.initial_data.get("divisoes", [])
-        dividir = self.initial_data.get("dividir_igualmente", False)
-        participantes_ids = self.initial_data.get("participantes_ids", [])
+        raw = self.initial_data
+        divisoes_data = raw.get("divisoes") or []
+        dividir = raw.get("dividir_igualmente", False)
+        participantes_ids = raw.get("participantes_ids") or []
 
-        validated_data.pop("divisoes", None)
         validated_data.pop("dividir_igualmente", None)
         validated_data.pop("participantes_ids", None)
 
