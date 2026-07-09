@@ -1,8 +1,25 @@
 from django.conf import settings
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+
+
+class UsuarioManager(BaseUserManager):
+    def create_user(self, email, nome, password=None, **extra_fields):
+        if not email:
+            raise ValueError("O email é obrigatório")
+        email = self.normalize_email(email)
+        usuario = self.model(email=email, nome=nome, **extra_fields)
+        usuario.set_password(password)
+        usuario.save(using=self._db)
+        return usuario
+
+    def create_superuser(self, email, nome, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("papel_sistema", "admin")
+        return self.create_user(email, nome, password, **extra_fields)
 
 
 class Usuario(AbstractUser):
@@ -24,6 +41,8 @@ class Usuario(AbstractUser):
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["nome"]
+
+    objects = UsuarioManager()
 
     class Meta:
         verbose_name = "usuário"
