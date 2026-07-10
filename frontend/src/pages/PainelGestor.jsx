@@ -14,6 +14,7 @@ export default function PainelGestor() {
   const [grupos, setGrupos] = useState([]);
   const [grupoSel, setGrupoSel] = useState(null);
   const [membros, setMembros] = useState([]);
+  const [mesadas, setMesadas] = useState([]);
   const [quemDeve, setQuemDeve] = useState([]);
   const [orcResumo, setOrcResumo] = useState([]);
   const [transacoes, setTransacoes] = useState([]);
@@ -34,19 +35,59 @@ export default function PainelGestor() {
 
   const carregarGrupo = async (gid) => {
     setGrupoSel(gid);
+    setAba("membros");
     try {
-      const [mr, t] = await Promise.all([
+      const [mr, t, ms] = await Promise.all([
         api.get(`/grupos/${gid}/membros/`),
         api.get("/transacoes/"),
+        api.get("/mesadas/"),
       ]);
       const tGrupo = (t.data.results || []).filter(tx => tx.grupo === gid);
       setMembros(mr.data.results || []);
       setTransacoes(tGrupo);
+      setMesadas((ms.data.results || []).filter(m => m.grupo === gid));
       const q = await api.get(`/grupos/${gid}/quem_deve_a_quem/`);
       setQuemDeve(q.data.membros || []);
       const o = await api.get(`/grupos/${gid}/orcamento_resumo/`);
       setOrcResumo(o.data.orcamentos || []);
     } catch { }
+  };
+
+  const extrairErro = (e, fallback) => {
+    const data = e.response?.data;
+    if (typeof data?.detail === "string") return data.detail;
+    if (data && typeof data === "object") return JSON.stringify(data);
+    return fallback;
+  };
+
+  const criarMesada = async () => {
+    try {
+      await api.post("/mesadas/", {
+        dependente: Number(form.dependente),
+        grupo: grupoSel,
+        valor: form.valor,
+        periodo_recarga: form.periodo_recarga || "mensal",
+      });
+      setModalOpen(false);
+      setMsg("Mesada criada!");
+      carregarGrupo(grupoSel);
+    } catch (e) {
+      setMsg("Erro: " + extrairErro(e, "não foi possível criar a mesada."));
+    }
+  };
+
+  const recarregarMesada = async (mesada) => {
+    const valor = prompt(
+      `Recarregar a mesada de ${mesada.nome_dependente}. Valor (deixe em branco para ${formatMoney(mesada.valor)}):`
+    );
+    if (valor === null) return;
+    try {
+      await api.post(`/mesadas/${mesada.id}/recarregar/`, valor ? { valor } : {});
+      setMsg("Mesada recarregada!");
+      carregarGrupo(grupoSel);
+    } catch (e) {
+      setMsg("Erro: " + extrairErro(e, "não foi possível recarregar."));
+    }
   };
 
   const criarGrupo = async () => {
@@ -99,19 +140,28 @@ export default function PainelGestor() {
     { key: "grupos", label: "Meus Grupos" },
     { key: "detalhe", label: "Detalhes do Grupo", disabled: !grupoSel },
   ];
+  const abasDetalhe = ["detalhe", "membros", "transacoes", "quemdeve", "orcamento", "mesadas"];
 
   return (
     <div>
       <h2 className="text-xl font-bold mb-2">Painel do Gestor — {user?.nome}</h2>
-      {msg && <div className="bg-green-100 text-green-800 p-2 rounded text-sm mb-3">{msg}</div>}
+      {msg && (
+        <div className={`p-2 rounded text-sm mb-3 ${msg.startsWith("Erro") ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>
+          {msg}
+          <button onClick={() => setMsg("")} className="float-right font-bold px-1">×</button>
+        </div>
+      )}
 
-      <div className="flex gap-2 mb-4 border-b">
-        {abas.map(a => (
-          <button key={a.key} onClick={() => a.key !== "detalhe" || grupoSel ? setAba(a.key) : null}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg ${aba === a.key ? "bg-white border border-b-white -mb-px text-indigo-600" : "text-gray-500 hover:text-gray-700"} ${a.disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
-            {a.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2 mb-4 border-b">
+        {abas.map(a => {
+          const ativa = a.key === "grupos" ? aba === "grupos" : abasDetalhe.includes(aba);
+          return (
+            <button key={a.key} onClick={() => a.key === "grupos" ? setAba("grupos") : grupoSel && setAba("membros")}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg ${ativa ? "bg-white border border-b-white -mb-px text-indigo-600" : "text-gray-500 hover:text-gray-700"} ${a.disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
+              {a.label}
+            </button>
+          );
+        })}
       </div>
 
       {aba === "grupos" && (
@@ -134,13 +184,13 @@ export default function PainelGestor() {
         </div>
       )}
 
-      {aba === "detalhe" && grupoSel && (
+      {abasDetalhe.includes(aba) && grupoSel && (
         <div>
-          <div className="flex gap-3 mb-4 border-b pb-2">
-            {["membros", "transacoes", "quemdeve", "orcamento"].map(k => (
+          <div className="flex flex-wrap gap-3 mb-4 border-b pb-2">
+            {["membros", "transacoes", "quemdeve", "orcamento", "mesadas"].map(k => (
               <button key={k} onClick={() => setAba(k)}
                 className={`text-sm px-3 py-1 rounded ${aba === k ? "bg-indigo-100 text-indigo-700 font-medium" : "text-gray-500"}`}>
-                {k === "membros" ? "Membros" : k === "transacoes" ? "Transações" : k === "quemdeve" ? "Quem Deve a Quem" : "Orçamento"}
+                {k === "membros" ? "Membros" : k === "transacoes" ? "Transações" : k === "quemdeve" ? "Quem Deve a Quem" : k === "orcamento" ? "Orçamento" : "Mesadas"}
               </button>
             ))}
           </div>
@@ -149,7 +199,7 @@ export default function PainelGestor() {
             <div>
               <button onClick={() => { setForm({ usuario_id: "" }); setModalTipo("membro"); setModalOpen(true); }}
                 className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 mb-3">+ Adicionar Membro</button>
-              <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="bg-white rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-3">Nome</th><th className="p-3">Email</th><th className="p-3">Papel</th></tr></thead>
                   <tbody>
@@ -166,7 +216,7 @@ export default function PainelGestor() {
             <div>
               <button onClick={() => { setForm({ conta: "", categoria: "", valor: "", descricao: "", modo: "igual", divisoes: [] }); setModalTipo("despesa"); setModalOpen(true); }}
                 className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 mb-3">+ Dividir Despesa</button>
-              <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="bg-white rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-3">Descrição</th><th className="p-3">Valor</th><th className="p-3">Data</th></tr></thead>
                   <tbody>
@@ -181,7 +231,7 @@ export default function PainelGestor() {
           )}
 
           {aba === "quemdeve" && (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-white rounded-lg shadow overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50"><tr><th className="p-3">Membro</th><th className="p-3">Papel</th><th className="p-3">Saldo</th><th className="p-3">Status</th></tr></thead>
                 <tbody>
@@ -200,9 +250,37 @@ export default function PainelGestor() {
             </div>
           )}
 
+          {aba === "mesadas" && (
+            <div>
+              <button onClick={() => { setForm({ dependente: "", valor: "", periodo_recarga: "mensal" }); setModalTipo("mesada"); setModalOpen(true); }}
+                className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 mb-3">+ Nova Mesada</button>
+              <div className="bg-white rounded-lg shadow overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left">
+                    <tr><th className="p-3">Dependente</th><th className="p-3">Valor</th><th className="p-3">Recarga</th><th className="p-3">Saldo Atual</th><th className="p-3"></th></tr>
+                  </thead>
+                  <tbody>
+                    {mesadas.map(m => (
+                      <tr key={m.id} className="border-t">
+                        <td className="p-3 font-medium">{m.nome_dependente}</td>
+                        <td className="p-3">{formatMoney(m.valor)}</td>
+                        <td className="p-3 capitalize">{m.periodo_recarga}</td>
+                        <td className={`p-3 font-medium ${Number(m.saldo_atual) > 0 ? "text-green-600" : "text-red-600"}`}>{formatMoney(m.saldo_atual)}</td>
+                        <td className="p-3">
+                          <button onClick={() => recarregarMesada(m)} className="text-indigo-600 hover:underline text-xs">Recarregar</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {mesadas.length === 0 && <tr><td colSpan={5} className="p-3 text-gray-400 text-center">Nenhuma mesada neste grupo.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {aba === "orcamento" && (
             <div>
-              <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
+              <div className="bg-white rounded-lg shadow overflow-x-auto mb-6">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-3">Categoria</th><th className="p-3">Previsto</th><th className="p-3">Realizado</th><th className="p-3">Diferença</th></tr></thead>
                   <tbody>
@@ -238,7 +316,24 @@ export default function PainelGestor() {
       )}
 
       {/* Modals */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={modalTipo === "grupo" ? "Novo Grupo" : modalTipo === "membro" ? "Adicionar Membro" : "Dividir Despesa"}>
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={modalTipo === "grupo" ? "Novo Grupo" : modalTipo === "membro" ? "Adicionar Membro" : modalTipo === "mesada" ? "Nova Mesada" : "Dividir Despesa"}>
+        {modalTipo === "mesada" && (
+          <div className="space-y-3">
+            <select className="w-full border rounded px-3 py-2 text-sm" value={form.dependente || ""} onChange={e => setForm({ ...form, dependente: e.target.value })}>
+              <option value="">Dependente</option>
+              {membros.filter(m => m.papel_no_grupo === "dependente").map(m => (
+                <option key={m.usuario} value={m.usuario}>{m.nome_usuario}</option>
+              ))}
+            </select>
+            <input className="w-full border rounded px-3 py-2 text-sm" type="number" step="0.01" placeholder="Valor da mesada" value={form.valor || ""} onChange={e => setForm({ ...form, valor: e.target.value })} />
+            <select className="w-full border rounded px-3 py-2 text-sm" value={form.periodo_recarga || "mensal"} onChange={e => setForm({ ...form, periodo_recarga: e.target.value })}>
+              <option value="semanal">Semanal</option>
+              <option value="quinzenal">Quinzenal</option>
+              <option value="mensal">Mensal</option>
+            </select>
+            <button onClick={criarMesada} className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm hover:bg-indigo-700">Criar Mesada</button>
+          </div>
+        )}
         {modalTipo === "grupo" && (
           <div className="space-y-3">
             <input className="w-full border rounded px-3 py-2 text-sm" placeholder="Nome do grupo" value={form.nome || ""} onChange={e => setForm({ ...form, nome: e.target.value })} />

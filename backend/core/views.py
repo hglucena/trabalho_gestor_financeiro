@@ -1,9 +1,14 @@
+import csv
+import io
 from collections import defaultdict
-from decimal import Decimal
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
+from django.core.exceptions import ValidationError
 from django.db import connections
 from django.db.models import Q, Sum
 from django.http import JsonResponse
+from django.utils import timezone
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -15,10 +20,12 @@ from core.models import (
     AutorizacaoConsultor,
     Categoria,
     Conta,
+    ContaAPagar,
     DivisaoDespesa,
     Grupo,
     MembroGrupo,
     Mesada,
+    MetaEconomia,
     Orcamento,
     Recomendacao,
     Transacao,
@@ -43,11 +50,13 @@ from core.serializers import (
     CadastroSerializer,
     CategoriaAdminSerializer,
     CategoriaSerializer,
+    ContaAPagarSerializer,
     ContaSerializer,
     DivisaoDespesaSerializer,
     GrupoSerializer,
     MembroGrupoSerializer,
     MesadaSerializer,
+    MetaEconomiaSerializer,
     OrcamentoSerializer,
     RecomendacaoSerializer,
     TransacaoCreateSerializer,
@@ -292,11 +301,38 @@ class TransacaoViewSet(viewsets.ModelViewSet):
             usuario=user, papel_no_grupo="dependente"
         ).exists()
         if is_dependente:
-            return Transacao.objects.filter(usuario=user).order_by("-data")
-        grupos_ids = MembroGrupo.objects.filter(usuario=user).values_list("grupo_id", flat=True)
-        return Transacao.objects.filter(
-            Q(usuario=user) | Q(grupo_id__in=grupos_ids)
-        ).order_by("-data")
+            queryset = Transacao.objects.filter(usuario=user)
+        else:
+            grupos_ids = MembroGrupo.objects.filter(usuario=user).values_list("grupo_id", flat=True)
+            queryset = Transacao.objects.filter(
+                Q(usuario=user) | Q(grupo_id__in=grupos_ids)
+            )
+        return self._aplicar_filtros(queryset).order_by("-data")
+
+    def _aplicar_filtros(self, queryset):
+        params = self.request.query_params
+        data_inicio = self._parse_data(params.get("data_inicio"))
+        data_fim = self._parse_data(params.get("data_fim"))
+        if data_inicio:
+            queryset = queryset.filter(data__date__gte=data_inicio)
+        if data_fim:
+            queryset = queryset.filter(data__date__lte=data_fim)
+        if params.get("categoria", "").isdigit():
+            queryset = queryset.filter(categoria_id=params["categoria"])
+        if params.get("tipo") in ("receita", "despesa"):
+            queryset = queryset.filter(tipo=params["tipo"])
+        if params.get("grupo", "").isdigit():
+            queryset = queryset.filter(grupo_id=params["grupo"])
+        return queryset
+
+    @staticmethod
+    def _parse_data(valor):
+        if not valor:
+            return None
+        try:
+            return datetime.strptime(valor, "%Y-%m-%d").date()
+        except ValueError:
+            return None
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
@@ -316,6 +352,7 @@ class TransacaoViewSet(viewsets.ModelViewSet):
         if tipo == "despesa":
             mesada = Mesada.objects.filter(dependente=user).first()
             if mesada:
+                mesada.recarregar_se_devido()
                 if valor > mesada.saldo_atual:
                     raise PermissionDenied(
                         f"Gasto acima do limite da mesada. Saldo disponível: R$ {mesada.saldo_atual}"
@@ -329,6 +366,86 @@ class TransacaoViewSet(viewsets.ModelViewSet):
                 mesada.saldo_atual -= transacao.valor
                 mesada.save(update_fields=["saldo_atual"])
 
+    @action(detail=False, methods=["post"])
+    def importar_csv(self, request):
+        """Importa transações em lote de um CSV com colunas: data,descricao,valor,tipo,categoria."""
+        user = request.user
+        if MembroGrupo.objects.filter(usuario=user, papel_no_grupo="dependente").exists():
+            raise PermissionDenied("Dependentes não podem importar extrato.")
+
+        arquivo = request.FILES.get("arquivo")
+        if not arquivo:
+            return Response({"detail": "Envie o arquivo CSV no campo 'arquivo'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        conta = Conta.objects.filter(id=request.data.get("conta"), usuario=user).first()
+        if not conta:
+            return Response({"detail": "Informe uma conta válida sua no campo 'conta'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            texto = arquivo.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return Response({"detail": "O arquivo deve estar em UTF-8."}, status=status.HTTP_400_BAD_REQUEST)
+
+        importadas = 0
+        erros = []
+        for numero, linha in enumerate(csv.DictReader(io.StringIO(texto)), start=2):
+            try:
+                transacao = self._linha_para_transacao(linha, user, conta)
+            except ValueError as exc:
+                erros.append({"linha": numero, "erro": str(exc)})
+                continue
+            try:
+                transacao.save()
+            except ValidationError as exc:
+                erros.append({"linha": numero, "erro": "; ".join(exc.messages)})
+                continue
+            importadas += 1
+
+        return Response({"importadas": importadas, "erros": erros}, status=status.HTTP_201_CREATED)
+
+    @staticmethod
+    def _linha_para_transacao(linha, user, conta):
+        data_txt = (linha.get("data") or "").strip()
+        data = None
+        for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                data = datetime.strptime(data_txt, formato)
+                break
+            except ValueError:
+                continue
+        if data is None:
+            raise ValueError(f"Data inválida: '{data_txt}' (use AAAA-MM-DD ou DD/MM/AAAA).")
+        data = timezone.make_aware(data)
+
+        try:
+            valor = Decimal((linha.get("valor") or "").strip().replace(",", "."))
+        except InvalidOperation:
+            raise ValueError(f"Valor inválido: '{linha.get('valor')}'.")
+        if valor <= 0:
+            raise ValueError("O valor deve ser maior que zero.")
+
+        tipo = (linha.get("tipo") or "despesa").strip().lower()
+        if tipo not in ("receita", "despesa"):
+            raise ValueError(f"Tipo inválido: '{tipo}' (use receita ou despesa).")
+
+        nome_categoria = (linha.get("categoria") or "").strip()
+        if not nome_categoria:
+            raise ValueError("A coluna 'categoria' é obrigatória.")
+        categoria = Categoria.objects.filter(
+            Q(usuario=user) | Q(padrao=True), nome__iexact=nome_categoria
+        ).first()
+        if categoria is None:
+            categoria = Categoria.objects.create(usuario=user, nome=nome_categoria, tipo=tipo)
+
+        return Transacao(
+            usuario=user,
+            conta=conta,
+            categoria=categoria,
+            tipo=tipo,
+            valor=valor,
+            descricao=(linha.get("descricao") or "").strip(),
+            data=data,
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -396,11 +513,15 @@ class MesadaViewSet(viewsets.ModelViewSet):
             usuario=user, papel_no_grupo="dependente"
         ).exists()
         if is_dependente:
-            return Mesada.objects.filter(dependente=user)
-        grupos_ids = MembroGrupo.objects.filter(
-            usuario=user, papel_no_grupo="responsavel"
-        ).values_list("grupo_id", flat=True)
-        return Mesada.objects.filter(grupo_id__in=grupos_ids)
+            queryset = Mesada.objects.filter(dependente=user)
+        else:
+            grupos_ids = MembroGrupo.objects.filter(
+                usuario=user, papel_no_grupo="responsavel"
+            ).values_list("grupo_id", flat=True)
+            queryset = Mesada.objects.filter(grupo_id__in=grupos_ids)
+        for mesada in queryset:
+            mesada.recarregar_se_devido()
+        return queryset
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
@@ -417,6 +538,136 @@ class MesadaViewSet(viewsets.ModelViewSet):
         if mesada.saldo_atual == 0:
             mesada.saldo_atual = mesada.valor
             mesada.save(update_fields=["saldo_atual"])
+
+    @action(detail=True, methods=["post"])
+    def recarregar(self, request, pk=None):
+        """Recarga manual pelo gestor: soma ao saldo o valor da mesada (ou um valor informado)."""
+        mesada = self.get_object()
+        valor_txt = str(request.data.get("valor", mesada.valor))
+        try:
+            valor = Decimal(valor_txt.replace(",", "."))
+        except InvalidOperation:
+            return Response({"detail": f"Valor inválido: '{valor_txt}'."}, status=status.HTTP_400_BAD_REQUEST)
+        if valor <= 0:
+            return Response({"detail": "O valor da recarga deve ser maior que zero."}, status=status.HTTP_400_BAD_REQUEST)
+        mesada.saldo_atual += valor
+        mesada.save(update_fields=["saldo_atual"])
+        return Response(MesadaSerializer(mesada).data)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Conta a pagar
+# ══════════════════════════════════════════════════════════════════════════
+
+class ContaAPagarViewSet(viewsets.ModelViewSet):
+    serializer_class = ContaAPagarSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin, IsOwner]
+
+    def get_queryset(self):
+        queryset = ContaAPagar.objects.filter(usuario=self.request.user)
+        pago = self.request.query_params.get("pago")
+        if pago in ("true", "false"):
+            queryset = queryset.filter(pago=(pago == "true"))
+        return queryset.order_by("vencimento")
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def pagar(self, request, pk=None):
+        """Marca como paga e lança a despesa correspondente na conta do usuário
+        (campo 'conta' opcional; padrão: primeira conta ativa)."""
+        conta_a_pagar = self.get_object()
+        if conta_a_pagar.pago:
+            return Response({"detail": "Esta conta já está paga."}, status=status.HTTP_400_BAD_REQUEST)
+
+        conta = _conta_do_usuario(request)
+        if conta is None:
+            return Response(
+                {"detail": "Crie uma conta antes de registrar o pagamento."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        categoria, _ = Categoria.objects.get_or_create(
+            usuario=None, nome="Contas", defaults={"tipo": "despesa", "padrao": True},
+        )
+        Transacao.objects.create(
+            usuario=request.user, conta=conta, categoria=categoria,
+            tipo="despesa", valor=conta_a_pagar.valor,
+            descricao=f"Pagamento: {conta_a_pagar.descricao}",
+        )
+        conta_a_pagar.pago = True
+        conta_a_pagar.save(update_fields=["pago"])
+        return Response(ContaAPagarSerializer(conta_a_pagar).data)
+
+
+def _conta_do_usuario(request):
+    """Resolve a conta informada no body (se for do usuário) ou a primeira conta ativa."""
+    conta_id = request.data.get("conta")
+    queryset = Conta.objects.filter(usuario=request.user, ativa=True)
+    if conta_id:
+        return queryset.filter(id=conta_id).first()
+    return queryset.first()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Meta de economia
+# ══════════════════════════════════════════════════════════════════════════
+
+class MetaEconomiaViewSet(viewsets.ModelViewSet):
+    serializer_class = MetaEconomiaSerializer
+    permission_classes = [permissions.IsAuthenticated, NaoAdmin, IsOwner]
+
+    def get_queryset(self):
+        return MetaEconomia.objects.filter(usuario=self.request.user).order_by("-criada_em")
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def aportar(self, request, pk=None):
+        """Adiciona um valor guardado à meta e lança a despesa correspondente
+        (o dinheiro sai do saldo da conta do usuário)."""
+        meta = self.get_object()
+        valor_txt = str(request.data.get("valor", ""))
+        try:
+            valor = Decimal(valor_txt.replace(",", "."))
+        except InvalidOperation:
+            return Response({"detail": f"Valor inválido: '{valor_txt}'."}, status=status.HTTP_400_BAD_REQUEST)
+        if valor <= 0:
+            return Response({"detail": "O valor do aporte deve ser maior que zero."}, status=status.HTTP_400_BAD_REQUEST)
+
+        conta = _conta_do_usuario(request)
+        if conta is None:
+            return Response(
+                {"detail": "Crie uma conta antes de fazer um aporte."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Dependente: o aporte sai da mesada — respeita o saldo e o deduz
+        mesada = Mesada.objects.filter(dependente=request.user).first()
+        if mesada:
+            mesada.recarregar_se_devido()
+            if valor > mesada.saldo_atual:
+                return Response(
+                    {"detail": f"Aporte acima do saldo da mesada. Saldo disponível: R$ {mesada.saldo_atual}"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        categoria, _ = Categoria.objects.get_or_create(
+            usuario=None, nome="Poupanca", defaults={"tipo": "despesa", "padrao": True},
+        )
+        Transacao.objects.create(
+            usuario=request.user, conta=conta, categoria=categoria,
+            tipo="despesa", valor=valor,
+            descricao=f"Aporte na meta: {meta.nome}",
+        )
+        if mesada:
+            mesada.saldo_atual -= valor
+            mesada.save(update_fields=["saldo_atual"])
+        meta.valor_atual += valor
+        meta.save(update_fields=["valor_atual"])
+        return Response(MetaEconomiaSerializer(meta).data)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -439,7 +690,9 @@ class AutorizacaoConsultorViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated(), NaoAdmin()]
 
     def perform_create(self, serializer):
-        serializer.save()
+        # Quem autoriza é sempre o próprio cliente logado — impede que um
+        # "consultor" se autoautorize nas finanças de terceiros.
+        serializer.save(cliente=self.request.user)
 
 
 class RecomendacaoViewSet(viewsets.ModelViewSet):

@@ -8,11 +8,13 @@ from core.views import (
     ConsultorClienteContasView,
     ConsultorClienteTransacoesView,
     ConsultorClientesView,
+    ContaAPagarViewSet,
     ContaViewSet,
     DivisaoDespesaViewSet,
     GrupoViewSet,
     health_check,
     LoginView,
+    MetaEconomiaViewSet,
     MeView,
     MembroGrupoViewSet,
     MesadaViewSet,
@@ -33,6 +35,8 @@ router.register(r"orcamentos", OrcamentoViewSet, basename="orcamento")
 router.register(r"mesadas", MesadaViewSet, basename="mesada")
 router.register(r"autorizacoes", AutorizacaoConsultorViewSet, basename="autorizacao")
 router.register(r"recomendacoes", RecomendacaoViewSet, basename="recomendacao")
+router.register(r"contas-a-pagar", ContaAPagarViewSet, basename="conta-a-pagar")
+router.register(r"metas", MetaEconomiaViewSet, basename="meta")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

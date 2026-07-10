@@ -12,7 +12,7 @@ export default function Layout() {
   useEffect(() => {
     if (user?.papel_sistema === "admin") return;
     api.get("/mesadas/")
-      .then(r => setTemMesada((r.data.results || []).length > 0))
+      .then(r => setTemMesada((r.data.results || []).some(m => m.dependente === user?.id)))
       .catch(() => {});
     api.get("/consultor/clientes/")
       .then(r => setTemConsultoria((r.data.results || r.data || []).length > 0))
@@ -27,12 +27,17 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
       <nav className="bg-indigo-700 text-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
-          <div className="flex items-center gap-6">
-            <span className="font-bold text-lg">Finanças Compartilhadas</span>
-            <NavLink to="/painel" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
+        <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-y-1 py-2 min-h-14">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+            <span className="font-bold text-lg">NossoBolso</span>
+            <NavLink to="/painel" end className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
               Painel
             </NavLink>
+            {user?.papel_sistema !== "admin" && !temMesada && (
+              <NavLink to="/painel/gestor" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
+                Grupos
+              </NavLink>
+            )}
             {temMesada && (
               <NavLink to="/painel/dependente" className={({ isActive }) => `text-sm hover:text-indigo-200 ${isActive ? "underline" : ""}`}>
                 Mesada

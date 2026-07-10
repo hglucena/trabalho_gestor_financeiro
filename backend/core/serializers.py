@@ -4,10 +4,12 @@ from core.models import (
     AutorizacaoConsultor,
     Categoria,
     Conta,
+    ContaAPagar,
     DivisaoDespesa,
     Grupo,
     MembroGrupo,
     Mesada,
+    MetaEconomia,
     Orcamento,
     Recomendacao,
     Transacao,
@@ -50,10 +52,20 @@ class UsuarioAdminSerializer(serializers.ModelSerializer):
 # ─── Conta ─────────────────────────────────────────────────────────────
 
 class ContaSerializer(serializers.ModelSerializer):
+    saldo_atual = serializers.SerializerMethodField()
+
     class Meta:
         model = Conta
-        fields = ["id", "nome", "saldo_inicial", "ativa", "usuario"]
+        fields = ["id", "nome", "saldo_inicial", "saldo_atual", "ativa", "usuario"]
         read_only_fields = ["id", "usuario"]
+
+    def get_saldo_atual(self, obj):
+        """Saldo vivo: saldo inicial + receitas - despesas da conta."""
+        from django.db.models import Sum
+
+        receitas = obj.transacoes.filter(tipo="receita").aggregate(t=Sum("valor"))["t"] or 0
+        despesas = obj.transacoes.filter(tipo="despesa").aggregate(t=Sum("valor"))["t"] or 0
+        return obj.saldo_inicial + receitas - despesas
 
 
 # ─── Categoria ─────────────────────────────────────────────────────────
@@ -199,8 +211,45 @@ class MesadaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Mesada
-        fields = ["id", "dependente", "nome_dependente", "grupo", "nome_grupo", "valor", "periodo_recarga", "saldo_atual"]
-        read_only_fields = ["id", "nome_dependente", "nome_grupo"]
+        fields = [
+            "id", "dependente", "nome_dependente", "grupo", "nome_grupo",
+            "valor", "periodo_recarga", "saldo_atual", "ultima_recarga",
+        ]
+        read_only_fields = ["id", "nome_dependente", "nome_grupo", "ultima_recarga"]
+
+
+# ─── Conta a pagar ─────────────────────────────────────────────────────
+
+class ContaAPagarSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContaAPagar
+        fields = ["id", "usuario", "descricao", "valor", "vencimento", "recorrencia", "pago"]
+        read_only_fields = ["id", "usuario"]
+
+
+# ─── Meta de economia ──────────────────────────────────────────────────
+
+class MetaEconomiaSerializer(serializers.ModelSerializer):
+    concluida = serializers.BooleanField(read_only=True)
+    percentual = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MetaEconomia
+        fields = [
+            "id", "usuario", "nome", "valor_alvo", "valor_atual",
+            "prazo", "criada_em", "concluida", "percentual",
+        ]
+        read_only_fields = ["id", "usuario", "criada_em"]
+
+    def get_percentual(self, obj):
+        if not obj.valor_alvo:
+            return 0.0
+        return round(min(float(obj.valor_atual) / float(obj.valor_alvo) * 100, 100), 1)
+
+    def validate_valor_alvo(self, valor):
+        if valor <= 0:
+            raise serializers.ValidationError("O valor alvo deve ser maior que zero.")
+        return valor
 
 
 # ─── Consultor ─────────────────────────────────────────────────────────
@@ -208,11 +257,38 @@ class MesadaSerializer(serializers.ModelSerializer):
 class AutorizacaoConsultorSerializer(serializers.ModelSerializer):
     nome_consultor = serializers.CharField(source="consultor.nome", read_only=True)
     nome_cliente = serializers.CharField(source="cliente.nome", read_only=True)
+    email_consultor = serializers.EmailField(source="consultor.email", read_only=True)
+    consultor_email = serializers.EmailField(write_only=True, required=False)
 
     class Meta:
         model = AutorizacaoConsultor
-        fields = ["id", "consultor", "nome_consultor", "cliente", "nome_cliente", "nivel", "status"]
-        read_only_fields = ["id", "nome_consultor", "nome_cliente"]
+        fields = [
+            "id", "consultor", "nome_consultor", "email_consultor",
+            "cliente", "nome_cliente", "nivel", "status", "consultor_email",
+        ]
+        read_only_fields = ["id", "cliente", "nome_consultor", "email_consultor", "nome_cliente"]
+        extra_kwargs = {"consultor": {"required": False}}
+        validators = []  # unicidade validada manualmente (cliente vem do request)
+
+    def validate(self, data):
+        email = data.pop("consultor_email", None)
+        if self.instance is not None:
+            return data  # updates só alteram nivel/status
+
+        if not data.get("consultor"):
+            if not email:
+                raise serializers.ValidationError("Informe o consultor (id) ou consultor_email.")
+            consultor = Usuario.objects.filter(email__iexact=email, papel_sistema="comum").first()
+            if consultor is None:
+                raise serializers.ValidationError(f"Nenhum usuário encontrado com o e-mail {email}.")
+            data["consultor"] = consultor
+
+        cliente = self.context["request"].user
+        if data["consultor"].id == cliente.id:
+            raise serializers.ValidationError("Você não pode ser consultor de si mesmo.")
+        if AutorizacaoConsultor.objects.filter(consultor=data["consultor"], cliente=cliente).exists():
+            raise serializers.ValidationError("Já existe uma autorização para este consultor.")
+        return data
 
 
 class RecomendacaoSerializer(serializers.ModelSerializer):

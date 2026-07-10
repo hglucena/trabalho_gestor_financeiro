@@ -132,7 +132,7 @@ export default function PainelConsultor() {
           </div>
 
           {(clienteSel.aba || "transacoes") === "transacoes" && (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-white rounded-lg shadow overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50"><tr><th className="p-3">Descrição</th><th className="p-3">Valor</th><th className="p-3">Tipo</th><th className="p-3">Data</th></tr></thead>
                 <tbody>
@@ -151,7 +151,7 @@ export default function PainelConsultor() {
           )}
 
           {(clienteSel.aba || "transacoes") === "contas" && (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-white rounded-lg shadow overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50"><tr><th className="p-3">Nome</th><th className="p-3">Saldo Inicial</th><th className="p-3">Ativa</th></tr></thead>
                 <tbody>
@@ -170,7 +170,7 @@ export default function PainelConsultor() {
                 className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 mb-3">
                 + Nova Recomendação
               </button>
-              <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="bg-white rounded-lg shadow overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-3">Texto</th><th className="p-3">Data</th></tr></thead>
                   <tbody>

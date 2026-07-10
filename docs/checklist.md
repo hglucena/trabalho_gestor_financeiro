@@ -7,46 +7,46 @@
 - [x] Criar docs/checklist.md
 
 ## Prompt 1 — Infraestrutura base
-- [ ] docker-compose.yml (serviços `db` + `backend`)
-- [ ] Projeto Django em `backend/` com Django REST Framework
-- [ ] `.env` e `.env.example`
-- [ ] Conexão PostgreSQL por variáveis de ambiente
-- [ ] Endpoint `GET /api/health/` → 200
-- [ ] `requirements.txt`
-- [ ] Verificar: `docker compose up` → `http://localhost:8000/api/health/`
+- [x] docker-compose.yml (serviços `db` + `backend`)
+- [x] Projeto Django em `backend/` com Django REST Framework
+- [x] `.env` e `.env.example`
+- [x] Conexão PostgreSQL por variáveis de ambiente
+- [x] Endpoint `GET /api/health/` → 200
+- [x] `requirements.txt`
+- [x] Verificar: `docker compose up` → `http://localhost:8000/api/health/`
 
 ## Prompt 2 — Modelo de dados + migrações
-- [ ] Custom User (`AbstractUser`) com login por e-mail e `papel_sistema`
-- [ ] Models MVP: Conta, Categoria, Transacao, Grupo, MembroGrupo, Orcamento, DivisaoDespesa
-- [ ] Models evolução (sem endpoints): Mesada, AutorizacaoConsultor, ContaAPagar, Recomendacao
-- [ ] Validações de integridade nos models (FK, unicidade, soma das partes)
-- [ ] Gerar e rodar migrações no container
+- [x] Custom User (`AbstractUser`) com login por e-mail e `papel_sistema`
+- [x] Models MVP: Conta, Categoria, Transacao, Grupo, MembroGrupo, Orcamento, DivisaoDespesa
+- [x] Models evolução (sem endpoints): Mesada, AutorizacaoConsultor, ContaAPagar, Recomendacao
+- [x] Validações de integridade nos models (FK, unicidade, soma das partes)
+- [x] Gerar e rodar migrações no container
 
 ## Prompt 3 — Autenticação por token + Django Admin
-- [ ] Endpoint `POST /api/registro/`
-- [ ] Endpoint `POST /api/login/` → retorna token
-- [ ] Endpoint `GET /api/me/`
-- [ ] TokenAuthentication configurado
-- [ ] Django Admin com entidades registradas
-- [ ] README: como criar superusuário
+- [x] Endpoint `POST /api/registro/`
+- [x] Endpoint `POST /api/login/` → retorna token
+- [x] Endpoint `GET /api/me/`
+- [x] TokenAuthentication configurado
+- [x] Django Admin com entidades registradas
+- [x] README: como criar superusuário
 
 ## Prompt 4 — API CRUD + permissões por visão
-- [ ] Serializers para cada entidade MVP
-- [ ] ViewSets REST para cada entidade
-- [ ] Classes de permissão: `IsOwner`, `IsAdmin`, `IsGestorDoGrupo`, `IsMembroDoGrupo`
-- [ ] Membro: CRUD próprio, vê grupo mas não administra
-- [ ] Gestor: administra grupo, não vê finanças pessoais alheias
-- [ ] Admin: gerencia usuários/categorias padrão, nunca acessa finanças
-- [ ] Requisições sem token → 401
+- [x] Serializers para cada entidade MVP
+- [x] ViewSets REST para cada entidade
+- [x] Classes de permissão: `IsOwner`, `IsAdmin`, `IsGestorDoGrupo`, `IsMembroDoGrupo`
+- [x] Membro: CRUD próprio, vê grupo mas não administra
+- [x] Gestor: administra grupo, não vê finanças pessoais alheias
+- [x] Admin: gerencia usuários/categorias padrão, nunca acessa finanças
+- [x] Requisições sem token → 401
 
 ## Prompt 5 — Regras de negócio: grupo, divisão de despesas, "quem deve a quem"
-- [ ] Criar grupo (criador vira responsável)
-- [ ] Convidar/adicionar membros ao grupo
-- [ ] Registrar despesa do grupo com divisão
-- [ ] Invariante da soma: recusar se Σ partes ≠ valor total
-- [ ] Divisão por valores definidos + opção de partes iguais
-- [ ] Endpoint "quem deve a quem" no grupo
-- [ ] Orçamento do grupo: previsto × realizado por categoria
+- [x] Criar grupo (criador vira responsável)
+- [x] Convidar/adicionar membros ao grupo
+- [x] Registrar despesa do grupo com divisão
+- [x] Invariante da soma: recusar se Σ partes ≠ valor total
+- [x] Divisão por valores definidos + opção de partes iguais
+- [x] Endpoint "quem deve a quem" no grupo
+- [x] Orçamento do grupo: previsto × realizado por categoria
 
 ## Prompt 6 — Testes automáticos
 - [x] Testes de acesso e isolamento (Membro, Gestor, Admin)
@@ -92,3 +92,34 @@
 - [x] Dockerfile backend + frontend ok, docker compose up funcional
 - [x] README, DEVLOG e checklist atualizados
 - [x] Todas as regras de acesso do plano (§5) cobertas por teste
+
+## Fase de fechamento (etapas 12–15)
+
+### Rebranding
+- [x] Nome NossoBolso no frontend, no repositório GitHub e (manual) na pasta local
+
+### Extras do plano §1 (coluna "Evoluções")
+- [x] Contas a pagar: API + aba no painel Membro + filtro por pago
+- [x] Lembretes de vencimento e orçamento estourado por e-mail (`enviar_lembretes`)
+- [x] Metas de economia: model + API + aba com barra de progresso e aportes
+- [x] Importação de extrato CSV em lote (com relatório de erros por linha)
+
+### Pendências do plano §7
+- [x] Recarga de mesada automática por período (lazy + comando `recarregar_mesadas`)
+- [x] Recarga de mesada manual pelo gestor (aba "Mesadas" no painel Gestor)
+- [x] Validação simulada com roteiro de cliente (`docs/validacao.md`)
+
+### Robustez e qualidade
+- [x] gunicorn + whitenoise + collectstatic no container do backend
+- [x] Filtros de transações (período, categoria, tipo, grupo)
+- [x] Fix de segurança: autorização de consultor força `cliente = usuário logado`
+- [x] Fix: sub-abas do PainelGestor não renderizavam; link "Grupos" ausente na navegação
+- [x] Feedback de erros da API nas telas; responsividade básica (nav + tabelas)
+- [x] Fluxo completo de consultor na interface (autorizar por e-mail, revogar, reativar)
+- [x] seed_demo completo: 2 famílias + república + 2 consultores + 6 meses de histórico
+
+### Documentação
+- [x] Diagrama ER (Mermaid) em docs/arquitetura.md
+- [x] docs/relatorio.md — rascunho do relatório do processo com agentes
+- [x] README atualizado (endpoints novos, usuários demo, comandos de rotina)
+- [x] Suíte final: 142 testes, 0 falhas

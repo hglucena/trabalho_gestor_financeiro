@@ -1,6 +1,6 @@
-# DEEPSEEK.md — Finanças Compartilhadas
+# DEEPSEEK.md — NossoBolso (Finanças Compartilhadas)
 
-Aplicação CRUD de finanças pessoais e de grupo, com múltiplas visões de usuário.
+Aplicação CRUD de finanças pessoais e de grupo, com cinco visões de usuário.
 
 ## Stack
 
@@ -65,8 +65,14 @@ docker compose exec backend python manage.py createsuperuser
 # Rodar testes
 docker compose exec backend python manage.py test
 
-# Popular dados de demonstração
+# Popular dados de demonstração (2 famílias, república, consultores, 6 meses de histórico)
 docker compose exec backend python manage.py seed_demo
+
+# Lembretes por e-mail (contas a pagar vencendo + orçamentos estourados)
+docker compose exec backend python manage.py enviar_lembretes --dias 3
+
+# Recarga de mesadas em lote (também acontece automaticamente ao consultar/gastar)
+docker compose exec backend python manage.py recarregar_mesadas
 
 # Ver logs do backend
 docker compose logs -f backend
@@ -79,13 +85,15 @@ docker compose down -v
 docker compose up --build
 ```
 
-## Visões de usuário (MVP)
+## Visões de usuário
 
 | Visão | Papel no sistema | O que acessa |
 |---|---|---|
-| Membro | `comum` | Próprias transações, contas, categorias pessoais, orçamento pessoal |
-| Gestor | `comum` | Orçamento do grupo, lançamentos do grupo, "quem deve a quem" |
-| Administrador | `admin` | Gestão de usuários e categorias padrão (Django Admin + API) |
+| Membro | `comum` | Próprias transações, contas, categorias, orçamentos, contas a pagar, metas, importação CSV, autorização de consultores |
+| Gestor | `comum` | Orçamento do grupo, lançamentos do grupo, "quem deve a quem", mesadas (criar/recarregar) |
+| Dependente | `comum` | Apenas a própria mesada (recarga automática por período) e gastos pessoais |
+| Consultor | `comum` | Clientes que o autorizaram, em modo leitura; recomendações se nível "comentar" |
+| Administrador | `admin` | Gestão de usuários e categorias padrão (Django Admin + API); nunca acessa finanças |
 
 ## Papéis definidos por relacionamento
 

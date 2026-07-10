@@ -1,4 +1,9 @@
-# DEVLOG — Finanças Compartilhadas
+# DEVLOG — NossoBolso (Finanças Compartilhadas)
+
+Diário de bordo do desenvolvimento com agente de código (Claude Code). A cada etapa registramos
+o que o agente acertou de primeira, os bugs encontrados (e como foram pegos) e as decisões tomadas.
+Etapas 0–11 correspondem à sequência de prompts planejada; as etapas 12+ são a fase de
+fechamento (rebranding, extras da evolução e revisão final).
 
 ## Prompt 0–1: Infraestrutura base
 
@@ -173,3 +178,130 @@ test_consultor.py     — 15 testes (autorização, leitura vs comentar, isolame
 - `seed_demo` popula banco com dados de demonstração
 
 **Regras de acesso do plano — cobertura completa. Nenhum critério do §5 ficou sem teste.**
+
+## Etapa 12: Rebranding — NossoBolso
+
+**Prompt (resumo):** "Gostei do NossoBolso. Bote esse nome em todas referências ao nome do
+projeto no front, na pasta do repositório e no nome do repositório no github."
+
+- 6 referências trocadas no frontend (`index.html`, `package.json`, `package-lock.json`,
+  `Layout.jsx`, `LoginPage.jsx`)
+- Repositório GitHub renomeado: `trabalho_gestor_financeiro` → `hglucena/NossoBolso`
+  (remote atualizado automaticamente pelo `gh repo rename`)
+- Renomeação da pasta local ficou manual (Windows bloqueia renomear pasta em uso pelo VSCode)
+
+## Etapa 13: Extras da evolução — contas a pagar, metas, CSV, lembretes, filtros
+
+**Prompt (resumo):** "Faça isso daqui tudo" — a lista completa de pendências levantada na
+revisão: extras do plano §1, pendências do §7, robustez de produção, qualidade de vida no
+frontend e material do relatório.
+
+**Backend:**
+- `ContaAPagar` ganhou serializer + viewset (`/api/contas-a-pagar/`, filtro `?pago=`) — o model
+  já existia desde o Prompt 2
+- Novo model `MetaEconomia` (migração 0002) com `POST /api/metas/{id}/aportar/` e percentual
+  calculado no serializer
+- `POST /api/transacoes/importar_csv/` — importação de extrato em lote; linhas inválidas viram
+  relatório de erros sem abortar; categoria inexistente é criada para o usuário; dependentes são
+  bloqueados (bypassariam a regra da mesada)
+- `manage.py enviar_lembretes` — e-mails de contas a pagar vencendo e orçamentos estourados
+  (EMAIL_BACKEND console por padrão)
+- Filtros em `/api/transacoes/`: `data_inicio`, `data_fim`, `categoria`, `tipo`, `grupo`
+- Produção: gunicorn (3 workers) + whitenoise + `collectstatic` no CMD do Dockerfile
+
+**Bug de segurança encontrado e corrigido:**
+1. **Autoautorização de consultor** — `AutorizacaoConsultorViewSet.perform_create()` salvava o
+   payload cru: qualquer usuário podia POSTar `{consultor: eu, cliente: vítima}` e ganhar acesso
+   de leitura às finanças de terceiros. Corrigido: `cliente` é sempre o usuário logado
+   (read-only no serializer), com validações de duplicidade e de autoconsultoria. O endpoint
+   também passou a aceitar `consultor_email` (a tela usa e-mail em vez de ID).
+
+**Bugs de frontend encontrados e corrigidos:**
+2. **Sub-abas do PainelGestor nunca renderizavam** — o bloco de detalhe exigia `aba === "detalhe"`,
+   mas clicar numa sub-aba mudava `aba` para "membros"/"transacoes"/..., escondendo tudo.
+3. **Painel do Gestor inacessível** — não havia link "Grupos" na navegação; só chegava lá quem
+   digitasse a URL.
+
+**Frontend:**
+- Painel Membro: abas novas "A Pagar", "Metas" (barra de progresso + aporte) e "Consultores"
+  (autorizar por e-mail, revogar/reativar, ver recomendações recebidas); botão "Importar CSV"
+- Painel Gestor: aba "Mesadas" (criar e recarregar); mensagens de erro da API nas telas
+- Responsividade: navegação com quebra de linha e tabelas com rolagem horizontal
+
+## Etapa 14: Recarga automática de mesada
+
+**Prompt (resumo):** "Você não pode fazer recarga automática da mesada não? É bem simples."
+
+- Campo `Mesada.ultima_recarga` (migração 0003) + método `recarregar_se_devido()`: credita o
+  valor da mesada a cada período vencido (semanal=7d, quinzenal=15d, mensal=30d)
+- Recarga **preguiçosa**: aplicada ao consultar `/api/mesadas/` e antes da validação de limite ao
+  lançar um gasto — funciona sem cron
+- `manage.py recarregar_mesadas` para agendamento em lote
+- Recarga manual pelo gestor mantida (`POST /api/mesadas/{id}/recarregar/`)
+- Tela do dependente mostra a data da próxima recarga
+
+## Etapa 15: seed_demo completo + documentação final
+
+- `seed_demo` reescrito: 11 usuários (Família Silva, República Central com 3 moradores,
+  Família Costa, 2 consultores com carteiras de 3 e 2 clientes), **6 meses de histórico**
+  (~180 transações pessoais + 4 meses de despesas divididas por grupo) para os gráficos,
+  mesadas com gastos, contas a pagar (incluindo vencida e paga), metas (incluindo uma concluída)
+  e recomendações. Idempotente: histórico não é duplicado ao rodar duas vezes.
+- Diagrama ER (Mermaid) em `docs/arquitetura.md`; decisões do §7 do plano atualizadas
+- `docs/validacao.md` — sessão de validação simulada com o roteiro do cliente (plano §6),
+  incluindo os ajustes que ela gerou
+- `docs/relatorio.md` — rascunho do relatório sobre o processo com agentes
+
+**Resultado final: 142 testes, 0 falhas** (99 anteriores + 43 novos em `test_extras.py`:
+contas a pagar, recarga manual e automática, metas, CSV, filtros, segurança de autorização e
+lembretes por e-mail).
+
+## Etapa 16: Bug pego em uso real com os dados de demonstração
+
+Ao rodar a aplicação com o seed completo, o gestor João caiu no **painel de dependente**, vendo
+a mesada do Pedro como se fosse dele — e com "duas abas iguais" no menu.
+
+**Causa:** o frontend classificava como dependente qualquer usuário cuja consulta a
+`/api/mesadas/` retornasse resultados. Mas o **gestor também enxerga mesadas** (as dos
+dependentes do grupo). O seed antigo não tinha nenhuma mesada, então a heurística nunca falhava
+— foi o cenário de dados rico que expôs o bug.
+
+**Correção:** dependente é quem tem mesada **própria** (`m.dependente === user.id`), aplicado no
+roteador (`App.jsx`), no menu (`Layout.jsx`) e no cartão da mesada (`PainelDependente.jsx`).
+
+**Lição para o relatório:** dados de demonstração realistas funcionam como teste de integração
+manual — heurísticas de interface que passam com dados pobres quebram com dados plausíveis.
+
+## Etapa 17: Saldo vivo, pagamento com lançamento e metas do dependente
+
+**Prompts (resumo):** "quando marcar alguma conta como paga o saldo deve diminuir; quando
+adicionarmos um valor economizado na meta o saldo deve diminuir; mesma coisa na nova
+transação/receita"; "o saldo também pode ficar negativo, lembre disso"; "bote também aba de
+metas para o dependente com mesada, tipo o filho quer comprar um PS5".
+
+**Decisão de domínio — saldo vivo:** o saldo deixou de ser estático (`saldo_inicial`) e passou a
+ser calculado: `saldo_inicial + receitas − despesas` (campo `saldo_atual` no serializer de
+Conta). Tudo que movimenta dinheiro gera uma **transação**, e o saldo deriva delas:
+
+- `POST /api/contas-a-pagar/{id}/pagar/` marca como paga e lança a despesa
+  "Pagamento: <descrição>" na conta do usuário (categoria padrão "Contas"); pagar duas vezes → 400
+- `POST /api/metas/{id}/aportar/` lança a despesa "Aporte na meta: <nome>" (categoria "Poupanca")
+- Transações comuns (receita/despesa) já refletem no saldo automaticamente
+
+**Decisão de projeto (registrada):** o saldo **pode ficar negativo** — nenhuma operação é
+bloqueada por saldo insuficiente. Exceção única: a mesada do dependente (regra §5.9 do plano).
+
+**Metas do dependente:** dependentes criam metas próprias (ex.: PS5) e guardam dinheiro **da
+mesada** — o aporte respeita o saldo da mesada (403 acima do limite), deduz dela e vira
+transação. Seção "Minhas Metas" no painel do dependente com barra de progresso; seed ganhou as
+metas "PS5" (Pedro) e "Bicicleta" (Bia).
+
+**Gráfico:** categoria padrão "Cartão de Crédito" adicionada, com faturas mensais no histórico
+do seed (João, Maria e Roberto) para aparecer na pizza de despesas; categorias "Contas" e
+"Poupanca" também viraram padrão (usadas pelos lançamentos automáticos).
+
+**UI:** saldo negativo aparece em vermelho (total e por conta); painéis recarregam contas e
+transações após pagar/aportar/lançar.
+
+**Resultado: 150 testes, 0 falhas** (8 novos: 5 de saldo vivo/pagamento e 3 de metas do
+dependente com mesada).

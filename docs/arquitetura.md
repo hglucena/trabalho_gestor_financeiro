@@ -1,4 +1,71 @@
-# Arquitetura — Finanças Compartilhadas (MVP v1)
+# Arquitetura — NossoBolso (Finanças Compartilhadas)
+
+## Diagrama ER
+
+```mermaid
+erDiagram
+    USUARIO ||--o{ CONTA : possui
+    USUARIO ||--o{ CATEGORIA : "cria (pessoal)"
+    USUARIO ||--o{ TRANSACAO : lanca
+    USUARIO ||--o{ ORCAMENTO : "define (pessoal)"
+    USUARIO ||--o{ MEMBRO_GRUPO : participa
+    USUARIO ||--o{ MESADA : "recebe (dependente)"
+    USUARIO ||--o{ CONTA_A_PAGAR : agenda
+    USUARIO ||--o{ META_ECONOMIA : persegue
+    USUARIO ||--o{ AUTORIZACAO_CONSULTOR : "autoriza (cliente)"
+    USUARIO ||--o{ RECOMENDACAO : "recebe (cliente)"
+    GRUPO ||--o{ MEMBRO_GRUPO : reune
+    GRUPO ||--o{ TRANSACAO : "agrupa (opcional)"
+    GRUPO ||--o{ ORCAMENTO : "define (grupo)"
+    GRUPO ||--o{ MESADA : mantem
+    USUARIO ||--o{ GRUPO : "e responsavel por"
+    CONTA ||--o{ TRANSACAO : registra
+    CATEGORIA ||--o{ TRANSACAO : classifica
+    CATEGORIA ||--o{ ORCAMENTO : limita
+    TRANSACAO ||--o{ DIVISAO_DESPESA : "divide-se em"
+    USUARIO ||--o{ DIVISAO_DESPESA : "deve (participante)"
+
+    USUARIO {
+        string email UK
+        string nome
+        string papel_sistema "comum | admin"
+    }
+    GRUPO {
+        string nome
+        int responsavel_id FK
+    }
+    MEMBRO_GRUPO {
+        string papel_no_grupo "responsavel | membro | dependente"
+    }
+    TRANSACAO {
+        string tipo "receita | despesa"
+        decimal valor
+        datetime data
+    }
+    DIVISAO_DESPESA {
+        decimal valor_devido
+        bool pago
+    }
+    MESADA {
+        decimal valor
+        string periodo_recarga
+        decimal saldo_atual
+    }
+    AUTORIZACAO_CONSULTOR {
+        string nivel "leitura | comentar"
+        bool status
+    }
+    CONTA_A_PAGAR {
+        decimal valor
+        date vencimento
+        bool pago
+    }
+    META_ECONOMIA {
+        decimal valor_alvo
+        decimal valor_atual
+        date prazo
+    }
+```
 
 ## Estrutura de pastas
 
@@ -107,7 +174,7 @@ DivisaoDespesa
   └── pago (boolean)
 ```
 
-### Evolução (models criados, sem endpoints no MVP)
+### Evolução (implementados após o MVP — todos com endpoints)
 
 ```
 Mesada
@@ -136,6 +203,14 @@ Recomendacao
   ├── cliente (FK → Usuario)
   ├── texto
   └── data
+
+MetaEconomia
+  ├── usuario (FK → Usuario)
+  ├── nome
+  ├── valor_alvo (Decimal)
+  ├── valor_atual (Decimal)
+  ├── prazo (Date, opcional)
+  └── criada_em
 ```
 
 ## Regras de acesso por visão
@@ -185,12 +260,30 @@ Tudo do Membro, mais:
 2. **Integridade referencial:** Toda Transação aponta para Conta e Categoria válidas e pertencentes ao mesmo usuário
 3. **Mesada:** Gasto acima do limite do período é bloqueado (evolução)
 
-## Decisões para o MVP
+## Decisões para o MVP (e resolução na fase de evolução)
 
 | Ponto em aberto (plano §7) | Decisão adotada |
 |---|---|
 | Divisão de despesa | Valores definidos por lançamento, com opção de dividir em partes iguais |
-| Mesada (automática vs manual) | Fora do escopo MVP |
-| Consultor (leitura ou sugestões) | Fora do escopo MVP |
+| Mesada (automática vs manual) | **As duas**: recarga automática por período (campo `ultima_recarga` + crédito preguiçoso ao consultar a mesada ou lançar gasto, e comando `recarregar_mesadas` para agendamento) e recarga manual pelo gestor (`POST /api/mesadas/{id}/recarregar/`) |
+| Consultor (leitura ou sugestões) | Dois níveis: `leitura` (só visualiza) e `comentar` (visualiza + cria recomendações) |
 | Gráficos | Somente o essencial: pizza por categoria + barra previsto × realizado (Recharts) |
-| Cliente real para validação | A definir |
+| Cliente real para validação | Sessão de validação simulada com roteiro de família/república — ver `docs/validacao.md` |
+
+## Extras implementados na evolução
+
+| Recurso | Backend | Frontend |
+|---|---|---|
+| Contas a pagar | `/api/contas-a-pagar/` (CRUD + filtro `?pago=`) | Aba "A Pagar" no painel Membro |
+| Metas de economia | `/api/metas/` (CRUD + `POST {id}/aportar/`) | Aba "Metas" com barra de progresso |
+| Importação de extrato CSV | `POST /api/transacoes/importar_csv/` | Botão "Importar CSV" na aba Transações |
+| Lembretes por e-mail | `python manage.py enviar_lembretes` (vencimentos + orçamentos estourados) | — |
+| Recarga de mesada | `POST /api/mesadas/{id}/recarregar/` (só gestor) | Aba "Mesadas" no painel Gestor |
+| Autorizar consultor | `POST /api/autorizacoes/` aceita `consultor_email`; `cliente` é sempre o usuário logado | Aba "Consultores" no painel Membro (autorizar, revogar, reativar, ver recomendações) |
+| Filtros de transações | `?data_inicio=&data_fim=&categoria=&tipo=&grupo=` | — |
+
+## Produção
+
+- Backend servido por **gunicorn** (3 workers) com estáticos via **whitenoise** (o Django Admin funciona sem servidor de arquivos separado)
+- `migrate` + `collectstatic` automáticos no start do container
+- `DEBUG`, `SECRET_KEY`, `ALLOWED_HOSTS`, `EMAIL_BACKEND` e `DEFAULT_FROM_EMAIL` lidos de variáveis de ambiente (`.env`)

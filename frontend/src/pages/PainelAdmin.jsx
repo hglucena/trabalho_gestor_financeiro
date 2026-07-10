@@ -71,7 +71,7 @@ export default function PainelAdmin() {
         <div>
           <button onClick={() => { setEditando(null); setForm({ email: "", nome: "", papel_sistema: "comum", is_active: true }); setModalTipo("usuario"); setModalOpen(true); }}
             className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 mb-3">+ Novo Usuário</button>
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50"><tr><th className="p-3">Nome</th><th className="p-3">Email</th><th className="p-3">Papel</th><th className="p-3">Ativo</th><th className="p-3"></th></tr></thead>
               <tbody>
@@ -95,7 +95,7 @@ export default function PainelAdmin() {
         <div>
           <button onClick={() => { setEditando(null); setForm({ nome: "", tipo: "despesa" }); setModalTipo("categoria"); setModalOpen(true); }}
             className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 mb-3">+ Nova Categoria Padrão</button>
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50"><tr><th className="p-3">Nome</th><th className="p-3">Tipo</th><th className="p-3"></th></tr></thead>
               <tbody>

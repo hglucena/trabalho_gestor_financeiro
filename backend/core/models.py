@@ -314,6 +314,7 @@ class Mesada(models.Model):
         ("quinzenal", "Quinzenal"),
         ("mensal", "Mensal"),
     ]
+    PERIODO_DIAS = {"semanal": 7, "quinzenal": 15, "mensal": 30}
 
     dependente = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -334,6 +335,7 @@ class Mesada(models.Model):
     saldo_atual = models.DecimalField(
         "saldo atual", max_digits=12, decimal_places=2, default=0
     )
+    ultima_recarga = models.DateTimeField("última recarga", default=timezone.now)
 
     class Meta:
         verbose_name = "mesada"
@@ -341,6 +343,21 @@ class Mesada(models.Model):
 
     def __str__(self):
         return f"Mesada de {self.dependente.nome} — R$ {self.valor}/{self.periodo_recarga}"
+
+    def recarregar_se_devido(self):
+        """Recarga automática: credita o valor da mesada a cada período vencido
+        desde a última recarga. Retorna quantas recargas foram aplicadas."""
+        from datetime import timedelta
+
+        periodo = timedelta(days=self.PERIODO_DIAS[self.periodo_recarga])
+        recargas = 0
+        while timezone.now() - self.ultima_recarga >= periodo:
+            self.saldo_atual += self.valor
+            self.ultima_recarga += periodo
+            recargas += 1
+        if recargas:
+            self.save(update_fields=["saldo_atual", "ultima_recarga"])
+        return recargas
 
 
 class AutorizacaoConsultor(models.Model):
@@ -397,6 +414,37 @@ class ContaAPagar(models.Model):
 
     def __str__(self):
         return f"{self.descricao} — R$ {self.valor}"
+
+
+class MetaEconomia(models.Model):
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="metas_economia",
+        verbose_name="usuário",
+    )
+    nome = models.CharField("nome", max_length=150)
+    valor_alvo = models.DecimalField("valor alvo", max_digits=12, decimal_places=2)
+    valor_atual = models.DecimalField(
+        "valor atual", max_digits=12, decimal_places=2, default=0
+    )
+    prazo = models.DateField("prazo", null=True, blank=True)
+    criada_em = models.DateTimeField("criada em", default=timezone.now)
+
+    class Meta:
+        verbose_name = "meta de economia"
+        verbose_name_plural = "metas de economia"
+
+    def __str__(self):
+        return f"{self.nome} — R$ {self.valor_atual}/{self.valor_alvo}"
+
+    @property
+    def concluida(self):
+        return self.valor_atual >= self.valor_alvo
+
+    def clean(self):
+        if self.valor_alvo is not None and self.valor_alvo <= 0:
+            raise ValidationError("O valor alvo da meta deve ser maior que zero.")
 
 
 class Recomendacao(models.Model):

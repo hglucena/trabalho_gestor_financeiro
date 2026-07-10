@@ -18,8 +18,9 @@ function PainelDispatcher() {
 
   useEffect(() => {
     if (user?.papel_sistema === "admin") return;
+    // dependente = tem mesada PRÓPRIA (gestor também enxerga mesadas, mas dos dependentes do grupo)
     api.get("/mesadas/")
-      .then(r => setTemMesada((r.data.results || []).length > 0))
+      .then(r => setTemMesada((r.data.results || []).some(m => m.dependente === user?.id)))
       .catch(() => setTemMesada(false));
   }, [user]);
 

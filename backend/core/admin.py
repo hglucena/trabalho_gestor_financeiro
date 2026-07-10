@@ -10,6 +10,7 @@ from core.models import (
     Grupo,
     MembroGrupo,
     Mesada,
+    MetaEconomia,
     Orcamento,
     Recomendacao,
     Transacao,
@@ -103,6 +104,12 @@ class AutorizacaoConsultorAdmin(admin.ModelAdmin):
 class ContaAPagarAdmin(admin.ModelAdmin):
     list_display = ["descricao", "usuario", "valor", "vencimento", "pago", "recorrencia"]
     list_filter = ["pago", "recorrencia"]
+
+
+@admin.register(MetaEconomia)
+class MetaEconomiaAdmin(admin.ModelAdmin):
+    list_display = ["nome", "usuario", "valor_alvo", "valor_atual", "prazo"]
+    search_fields = ["nome", "usuario__nome"]
 
 
 @admin.register(Recomendacao)

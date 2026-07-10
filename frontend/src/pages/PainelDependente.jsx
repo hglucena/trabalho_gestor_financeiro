@@ -12,21 +12,25 @@ export default function PainelDependente() {
   const [transacoes, setTransacoes] = useState([]);
   const [contas, setContas] = useState([]);
   const [categorias, setCategorias] = useState([]);
+  const [metas, setMetas] = useState([]);
   const [form, setForm] = useState({ conta: "", categoria: "", valor: "", descricao: "" });
+  const [formMeta, setFormMeta] = useState({ nome: "", valor_alvo: "" });
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [m, t, ct, cat] = await Promise.all([
+      const [m, t, ct, cat, mt] = await Promise.all([
         api.get("/mesadas/"),
         api.get("/transacoes/"),
         api.get("/contas/"),
         api.get("/categorias/"),
+        api.get("/metas/"),
       ]);
       setMesadas(m.data.results || []);
       setTransacoes(t.data.results || []);
       setContas(ct.data.results || []);
       setCategorias(cat.data.results || []);
+      setMetas(mt.data.results || []);
     } catch { }
   }, []);
 
@@ -52,7 +56,35 @@ export default function PainelDependente() {
     }
   };
 
-  const mesada = mesadas[0];
+  const criarMeta = async (e) => {
+    e.preventDefault();
+    setMsg("");
+    try {
+      await api.post("/metas/", { nome: formMeta.nome, valor_alvo: formMeta.valor_alvo });
+      setFormMeta({ nome: "", valor_alvo: "" });
+      setMsg("Meta criada! Guarde um pouco da mesada nela.");
+      load();
+    } catch (err) {
+      const detail = err.response?.data?.detail || "Erro ao criar a meta.";
+      setMsg(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+  };
+
+  const guardarNaMeta = async (meta) => {
+    const valor = prompt(`Quanto da sua mesada você quer guardar para "${meta.nome}"?`);
+    if (!valor) return;
+    setMsg("");
+    try {
+      await api.post(`/metas/${meta.id}/aportar/`, { valor });
+      setMsg(`Guardado em "${meta.nome}"! O valor saiu do saldo da mesada.`);
+      load();
+    } catch (err) {
+      const detail = err.response?.data?.detail || "Erro ao guardar.";
+      setMsg(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+  };
+
+  const mesada = mesadas.find(m => m.dependente === user?.id) || mesadas[0];
 
   return (
     <div>
@@ -84,6 +116,11 @@ export default function PainelDependente() {
             <div>
               <p className="text-sm text-gray-500">Recarga</p>
               <p className="font-semibold capitalize">{mesada.periodo_recarga}</p>
+              {mesada.ultima_recarga && (() => {
+                const dias = { semanal: 7, quinzenal: 15, mensal: 30 }[mesada.periodo_recarga] || 30;
+                const proxima = new Date(new Date(mesada.ultima_recarga).getTime() + dias * 86400000);
+                return <p className="text-xs text-gray-400">próxima em {proxima.toLocaleDateString("pt-BR")}</p>;
+              })()}
             </div>
           </div>
         </div>
@@ -115,7 +152,7 @@ export default function PainelDependente() {
 
         <div>
           <h3 className="font-semibold mb-3">Meus Gastos</h3>
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50"><tr><th className="p-3">Descrição</th><th className="p-3">Valor</th><th className="p-3">Data</th></tr></thead>
               <tbody>
@@ -132,6 +169,39 @@ export default function PainelDependente() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      {/* Metas do dependente */}
+      <div className="mt-6">
+        <h3 className="font-semibold mb-3">Minhas Metas</h3>
+        <div className="grid md:grid-cols-2 gap-4">
+          {metas.map(m => (
+            <div key={m.id} className="bg-white rounded-lg shadow p-4">
+              <h4 className="font-semibold mb-1">
+                {m.nome} {m.concluida && <span className="text-green-600 text-xs ml-1">✓ consegui!</span>}
+              </h4>
+              <p className="text-sm text-gray-500 mb-2">{formatMoney(m.valor_atual)} de {formatMoney(m.valor_alvo)}</p>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mb-3">
+                <div className={`h-2.5 rounded-full ${m.concluida ? "bg-green-500" : "bg-indigo-600"}`} style={{ width: `${m.percentual}%` }} />
+              </div>
+              {!m.concluida && (
+                <button onClick={() => guardarNaMeta(m)} className="bg-indigo-600 text-white px-3 py-1 rounded text-xs hover:bg-indigo-700">
+                  + Guardar da mesada
+                </button>
+              )}
+            </div>
+          ))}
+          <form onSubmit={criarMeta} className="bg-white rounded-lg shadow p-4 border-2 border-dashed border-indigo-200 space-y-2">
+            <p className="text-sm font-medium text-gray-600">Nova meta (ex.: PS5, bicicleta...)</p>
+            <input className="w-full border rounded px-3 py-2 text-sm" placeholder="O que você quer comprar?" value={formMeta.nome}
+              onChange={e => setFormMeta({ ...formMeta, nome: e.target.value })} required />
+            <input className="w-full border rounded px-3 py-2 text-sm" type="number" step="0.01" min="0.01" placeholder="Quanto custa? (R$)" value={formMeta.valor_alvo}
+              onChange={e => setFormMeta({ ...formMeta, valor_alvo: e.target.value })} required />
+            <button type="submit" className="w-full bg-indigo-600 text-white rounded-lg py-2 text-sm hover:bg-indigo-700">
+              Criar Meta
+            </button>
+          </form>
         </div>
       </div>
     </div>
