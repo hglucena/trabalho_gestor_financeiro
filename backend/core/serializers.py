@@ -57,10 +57,15 @@ class UsuarioAdminSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         senha = validated_data.pop("senha")
+        # admin criado pela API também precisa acessar o Django Admin
+        if validated_data.get("papel_sistema") == "admin":
+            validated_data["is_staff"] = True
         return Usuario.objects.create_user(password=senha, **validated_data)
 
     def update(self, instance, validated_data):
         senha = validated_data.pop("senha", None)
+        if validated_data.get("papel_sistema") == "admin":
+            validated_data["is_staff"] = True
         usuario = super().update(instance, validated_data)
         if senha:
             usuario.set_password(senha)

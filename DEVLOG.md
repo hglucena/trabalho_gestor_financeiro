@@ -336,3 +336,31 @@ de reciclar cores.
 
 **Bugs/UX corrigidos de brinde:** saldo negativo em vermelho em todos os lugares; mensagens de
 feedback fecháveis e com animação; estados vazios com ícone e call-to-action.
+
+## Etapa 19: Caça a bugs (revisão dirigida)
+
+**Prompt (resumo):** "Procure erros/bugs, procurei e achei nada."
+
+Seis achados — nenhum derrubava a aplicação, todos davam **dados errados ou fluxos confusos**
+(a categoria de bug mais difícil de notar testando na mão):
+
+1. **`orcamento_resumo` ignorava o período** — o "realizado" somava despesas de *todos* os
+   meses contra um limite mensal; com 6 meses de histórico, o previsto × realizado mostrava
+   estouros falsos. Corrigido filtrando pelo mês/ano do orçamento (+ teste).
+2. **Painel do Gestor truncava as transações do grupo** — buscava a 1ª página geral (20) e
+   filtrava no cliente. Agora usa o filtro do backend (`?grupo=` + `page_size`).
+3. **"Partes iguais" incluía dependentes no rateio** — o dependente tem mesada, não divide
+   aluguel. Excluídos da divisão (igual e manual).
+4. **Divisão manual era um stub** — o modal mandava `divisoes: []` e sugeria "usar a API".
+   Implementada a UI prometida no plano: um campo de valor por membro, com soma parcial exibida.
+5. **Botão "+ Autorizar Consultor" no painel do consultor** — após o endurecimento da etapa 13
+   (cliente = usuário logado), o botão autorizava um consultor *para o próprio consultor*.
+   Removido; o fluxo correto vive na aba Consultores do painel do Membro.
+6. **Admin criado pela API não recebia `is_staff`** — não conseguiria entrar no Django Admin
+   (follow-up do commit da Victória; + teste).
+
+Extra: paginação ganhou `?page_size=` (máx. 500) para o gráfico donut enxergar até 100
+transações em vez de 20.
+
+**Suíte: 165 testes, 0 falhas** (3 novos). A suíte pós-merge da Victória (162) também passou
+integralmente antes desta etapa.

@@ -503,6 +503,63 @@ class MetaDependenteTests(ExtrasTestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# Correções da caça a bugs (etapa 19)
+# ══════════════════════════════════════════════════════════════════════════
+
+class OrcamentoResumoPeriodoTests(ExtrasTestCase):
+    """O realizado do orçamento do grupo deve contar só o mês do período."""
+
+    def setUp(self):
+        super().setUp()
+        self._como(self.token_joao)
+        r = self.client.post("/api/grupos/", {"nome": "Casa"})
+        self.grupo_id = r.data["id"]
+        Orcamento.objects.create(
+            grupo_id=self.grupo_id, categoria=self.cat_alimentacao,
+            valor_limite=500, periodo="2026-07-01",
+        )
+        for data, valor in [("2026-07-10T12:00:00-03:00", 100), ("2026-06-10T12:00:00-03:00", 400)]:
+            Transacao.objects.create(
+                usuario=self.joao, conta=self.conta_joao, categoria=self.cat_alimentacao,
+                tipo="despesa", valor=valor, descricao="Mercado",
+                grupo_id=self.grupo_id, data=data,
+            )
+
+    def test_realizado_conta_apenas_o_mes_do_orcamento(self):
+        self._como(self.token_joao)
+        response = self.client.get(f"/api/grupos/{self.grupo_id}/orcamento_resumo/")
+        resumo = response.data["orcamentos"][0]
+        self.assertEqual(resumo["realizado"], 100.0)
+        self.assertEqual(resumo["diferenca"], 400.0)
+
+
+class PaginacaoTests(ExtrasTestCase):
+    def test_page_size_customizavel(self):
+        for i in range(25):
+            Transacao.objects.create(
+                usuario=self.joao, conta=self.conta_joao, categoria=self.cat_alimentacao,
+                tipo="despesa", valor=10, descricao=f"Gasto {i}",
+            )
+        self._como(self.token_joao)
+        padrao = self.client.get("/api/transacoes/")
+        self.assertEqual(len(padrao.data["results"]), 20)
+        maior = self.client.get("/api/transacoes/?page_size=100")
+        self.assertEqual(len(maior.data["results"]), 25)
+
+
+class AdminCriaAdminTests(ExtrasTestCase):
+    def test_admin_criado_pela_api_recebe_is_staff(self):
+        self._como(self.token_admin)
+        response = self.client.post("/api/usuarios/", {
+            "email": "novoadmin@test.com", "nome": "Novo Admin",
+            "senha": "senha123", "papel_sistema": "admin",
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        novo = Usuario.objects.get(email="novoadmin@test.com")
+        self.assertTrue(novo.is_staff)
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # Autorização de consultor — endurecimento
 # ══════════════════════════════════════════════════════════════════════════
 

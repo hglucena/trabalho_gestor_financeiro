@@ -56,22 +56,6 @@ export default function PainelConsultor() {
     }
   };
 
-  const criarAutorizacao = async () => {
-    try {
-      await api.post("/autorizacoes/", form);
-      setModalOpen(false);
-      setMsg("Autorização criada! O consultor já pode visualizar seus dados.");
-    } catch (e) {
-      setMsg(e.response?.data?.detail || JSON.stringify(e.response?.data) || "Erro.");
-    }
-  };
-
-  const revogarAutorizacao = async (id) => {
-    if (!confirm("Revogar esta autorização?")) return;
-    await api.delete(`/autorizacoes/${id}/`);
-    loadClientes();
-  };
-
   return (
     <div>
       <div className="mb-5">
@@ -96,12 +80,6 @@ export default function PainelConsultor() {
 
       {!clienteSel && (
         <div>
-          <div className="flex gap-2 mb-3">
-            <button onClick={() => { setForm({ consultor: "", nivel: "leitura" }); setModalTipo("autorizacao"); setModalOpen(true); }}
-              className="btn-primary">
-              + Autorizar Consultor
-            </button>
-          </div>
           {clientes.length === 0 ? (
             <div className="card p-10 text-center">
               <p className="text-4xl mb-2">🤝</p>
@@ -194,24 +172,12 @@ export default function PainelConsultor() {
         </div>
       )}
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={modalTipo === "recomendacao" ? "Nova Recomendação" : "Autorizar Consultor"}>
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Nova Recomendação">
         {modalTipo === "recomendacao" && (
           <div className="space-y-3">
             <textarea className="input" rows={4} placeholder="Texto da recomendação..." value={form.texto || ""}
               onChange={e => setForm({ ...form, texto: e.target.value })} />
             <button onClick={criarRecomendacao} className="btn-primary w-full">Enviar</button>
-          </div>
-        )}
-        {modalTipo === "autorizacao" && (
-          <div className="space-y-3">
-            <input className="input" type="number" placeholder="ID do consultor" value={form.consultor || ""}
-              onChange={e => setForm({ ...form, consultor: e.target.value })} />
-            <select className="input" value={form.nivel || "leitura"}
-              onChange={e => setForm({ ...form, nivel: e.target.value })}>
-              <option value="leitura">Leitura</option>
-              <option value="comentar">Comentar</option>
-            </select>
-            <button onClick={criarAutorizacao} className="btn-primary w-full">Autorizar</button>
           </div>
         )}
       </Modal>

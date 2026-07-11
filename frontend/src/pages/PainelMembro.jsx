@@ -38,7 +38,7 @@ export default function PainelMembro() {
   }, []);
 
   useEffect(() => { load("/contas/", setContas); }, [load]);
-  useEffect(() => { load("/transacoes/", setTransacoes); }, [load]);
+  useEffect(() => { load("/transacoes/?page_size=100", setTransacoes); }, [load]);
   useEffect(() => { load("/categorias/", setCategorias); }, [load]);
   useEffect(() => { load("/orcamentos/", setOrcamentos); }, [load]);
   useEffect(() => { load("/contas-a-pagar/", setContasAPagar); }, [load]);
@@ -66,7 +66,7 @@ export default function PainelMembro() {
       }
       setModalOpen(false);
       setEditando(null);
-      load(endpoint, setters[endpoint]);
+      load(endpoint === "/transacoes/" ? "/transacoes/?page_size=100" : endpoint, setters[endpoint]);
       if (endpoint === "/transacoes/") load("/contas/", setContas); // saldo vivo
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao salvar.") });
@@ -77,7 +77,8 @@ export default function PainelMembro() {
     if (!confirm("Confirmar exclusão?")) return;
     try {
       await api.delete(`${endpoint}${id}/`);
-      load(endpoint, setter);
+      load(endpoint === "/transacoes/" ? "/transacoes/?page_size=100" : endpoint, setter);
+      if (endpoint === "/transacoes/") load("/contas/", setContas); // saldo vivo
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao excluir.") });
     }
@@ -109,7 +110,7 @@ export default function PainelMembro() {
         texto: `${importadas} transação(ões) importada(s) para a conta "${contas[0].nome}".` +
           (erros.length ? ` ${erros.length} linha(s) com erro: ${erros.map(e => `linha ${e.linha} (${e.erro})`).join("; ")}` : ""),
       });
-      load("/transacoes/", setTransacoes);
+      load("/transacoes/?page_size=100", setTransacoes);
       load("/categorias/", setCategorias);
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao importar o CSV.") });
@@ -124,7 +125,7 @@ export default function PainelMembro() {
       await api.post(`/metas/${meta.id}/aportar/`, { valor });
       load("/metas/", setMetas);
       load("/contas/", setContas);
-      load("/transacoes/", setTransacoes);
+      load("/transacoes/?page_size=100", setTransacoes);
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro no aporte.") });
     }
@@ -374,7 +375,7 @@ export default function PainelMembro() {
                               await api.post(`/contas-a-pagar/${c.id}/pagar/`);
                               load("/contas-a-pagar/", setContasAPagar);
                               load("/contas/", setContas);
-                              load("/transacoes/", setTransacoes);
+                              load("/transacoes/?page_size=100", setTransacoes);
                               setMsg({ tipo: "ok", texto: `"${c.descricao}" paga — despesa lançada e saldo atualizado.` });
                             } catch (err) {
                               setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao pagar.") });

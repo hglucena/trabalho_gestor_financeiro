@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import api from "../api/client";
+import { extrairErro } from "../api/erros";
 import { useAuth } from "../contexts/AuthContext";
 import Modal from "../components/Modal";
 
@@ -39,25 +40,17 @@ export default function PainelGestor() {
     try {
       const [mr, t, ms] = await Promise.all([
         api.get(`/grupos/${gid}/membros/`),
-        api.get("/transacoes/"),
+        api.get(`/transacoes/?grupo=${gid}&page_size=200`),
         api.get("/mesadas/"),
       ]);
-      const tGrupo = (t.data.results || []).filter(tx => tx.grupo === gid);
       setMembros(mr.data.results || []);
-      setTransacoes(tGrupo);
+      setTransacoes(t.data.results || []);
       setMesadas((ms.data.results || []).filter(m => m.grupo === gid));
       const q = await api.get(`/grupos/${gid}/quem_deve_a_quem/`);
       setQuemDeve(q.data.membros || []);
       const o = await api.get(`/grupos/${gid}/orcamento_resumo/`);
       setOrcResumo(o.data.orcamentos || []);
     } catch { }
-  };
-
-  const extrairErro = (e, fallback) => {
-    const data = e.response?.data;
-    if (typeof data?.detail === "string") return data.detail;
-    if (data && typeof data === "object") return JSON.stringify(data);
-    return fallback;
   };
 
   const criarMesada = async () => {
@@ -111,6 +104,9 @@ export default function PainelGestor() {
     }
   };
 
+  // dependentes ficam fora do rateio — eles têm a própria mesada
+  const membrosDivisao = membros.filter(m => m.papel_no_grupo !== "dependente");
+
   const dividirDespesa = async () => {
     try {
       const data = {
@@ -123,16 +119,18 @@ export default function PainelGestor() {
       };
       if (form.modo === "igual") {
         data.dividir_igualmente = true;
-        data.participantes_ids = membros.map(m => m.usuario);
+        data.participantes_ids = membrosDivisao.map(m => m.usuario);
       } else {
-        data.divisoes = form.divisoes || [];
+        data.divisoes = membrosDivisao
+          .map(m => ({ participante: m.usuario, valor_devido: form.divisoes?.[m.usuario] }))
+          .filter(d => Number(d.valor_devido) > 0);
       }
       await api.post("/transacoes/", data);
       setModalOpen(false);
       carregarGrupo(grupoSel);
       setMsg("Despesa dividida com sucesso!");
     } catch (e) {
-      setMsg(e.response?.data ? JSON.stringify(e.response.data) : "Erro na divisão.");
+      setMsg("Erro: " + extrairErro(e, "não foi possível dividir a despesa."));
     }
   };
 
@@ -225,7 +223,7 @@ export default function PainelGestor() {
 
           {aba === "transacoes" && (
             <div>
-              <button onClick={() => { setForm({ conta: "", categoria: "", valor: "", descricao: "", modo: "igual", divisoes: [] }); setModalTipo("despesa"); setModalOpen(true); }}
+              <button onClick={() => { setForm({ conta: "", categoria: "", valor: "", descricao: "", modo: "igual", divisoes: {} }); setModalTipo("despesa"); setModalOpen(true); }}
                 className="btn-primary mb-3">+ Dividir Despesa</button>
               <div className="card overflow-x-auto">
                 <table className="w-full text-sm">
@@ -384,7 +382,21 @@ export default function PainelGestor() {
               <button onClick={() => setForm({ ...form, modo: "manual" })} className={`flex-1 py-1.5 text-sm rounded ${form.modo === "manual" ? "bg-indigo-600 text-white" : "bg-gray-200"}`}>Manual</button>
             </div>
             {form.modo === "manual" && (
-              <div className="text-xs text-gray-500">Edite os valores diretamente na API ou use partes iguais.</div>
+              <div className="space-y-2 bg-slate-50 rounded-xl p-3">
+                <p className="text-xs text-slate-500 font-medium">Quanto cada um deve? A soma precisa fechar com o valor total.</p>
+                {membrosDivisao.map(m => (
+                  <div key={m.usuario} className="flex items-center gap-2">
+                    <span className="text-sm text-slate-600 flex-1 truncate">{m.nome_usuario}</span>
+                    <input type="number" step="0.01" min="0" className="input w-28 py-1.5" placeholder="0,00"
+                      value={form.divisoes?.[m.usuario] || ""}
+                      onChange={e => setForm({ ...form, divisoes: { ...form.divisoes, [m.usuario]: e.target.value } })} />
+                  </div>
+                ))}
+                <p className="text-xs text-slate-400 text-right tnum">
+                  Soma: {Object.values(form.divisoes || {}).reduce((s, v) => s + (Number(v) || 0), 0).toFixed(2)}
+                  {form.valor ? ` / ${Number(form.valor).toFixed(2)}` : ""}
+                </p>
+              </div>
             )}
             <button onClick={dividirDespesa} className="btn-primary w-full">Registrar e Dividir</button>
           </div>

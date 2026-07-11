@@ -265,8 +265,10 @@ class GrupoViewSet(viewsets.ModelViewSet):
 
         resumo = []
         for orc in orcamentos:
+            # o realizado é do MÊS do orçamento — sem isso, meses antigos estouram um limite mensal
             realizado = Transacao.objects.filter(
                 grupo=grupo, categoria=orc.categoria, tipo="despesa",
+                data__year=orc.periodo.year, data__month=orc.periodo.month,
             ).aggregate(total=Sum("valor"))["total"] or 0
             resumo.append({
                 "categoria": orc.categoria.nome,
