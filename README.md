@@ -191,7 +191,7 @@ docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py test
 ```
 
-**150 testes, 0 falhas.**
+**165 testes, 0 falhas.**
 
 ## Regras de saldo
 
