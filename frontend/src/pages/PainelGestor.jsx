@@ -4,6 +4,9 @@ import api from "../api/client";
 import { extrairErro } from "../api/erros";
 import { useAuth } from "../contexts/AuthContext";
 import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
+
+const TRANS_PAGE_SIZE = 20;
 
 function formatMoney(v) {
   return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -19,6 +22,8 @@ export default function PainelGestor() {
   const [quemDeve, setQuemDeve] = useState([]);
   const [orcResumo, setOrcResumo] = useState([]);
   const [transacoes, setTransacoes] = useState([]);
+  const [transPage, setTransPage] = useState(1);
+  const [transCount, setTransCount] = useState(0);
   const [categorias, setCategorias] = useState([]);
   const [contas, setContas] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -34,18 +39,26 @@ export default function PainelGestor() {
   useEffect(() => { api.get("/categorias/").then(r => setCategorias(r.data.results || [])).catch(() => {}); }, []);
   useEffect(() => { api.get("/contas/").then(r => setContas(r.data.results || [])).catch(() => {}); }, []);
 
+  const loadTransacoesGrupo = useCallback(async (gid, page = 1) => {
+    try {
+      const res = await api.get(`/transacoes/?grupo=${gid}&page=${page}&page_size=${TRANS_PAGE_SIZE}`);
+      setTransacoes(res.data.results || []);
+      setTransCount(res.data.count || 0);
+      setTransPage(page);
+    } catch { }
+  }, []);
+
   const carregarGrupo = async (gid) => {
     setGrupoSel(gid);
     setAba("membros");
     try {
-      const [mr, t, ms] = await Promise.all([
+      const [mr, ms] = await Promise.all([
         api.get(`/grupos/${gid}/membros/`),
-        api.get(`/transacoes/?grupo=${gid}&page_size=200`),
         api.get("/mesadas/"),
       ]);
       setMembros(mr.data.results || []);
-      setTransacoes(t.data.results || []);
       setMesadas((ms.data.results || []).filter(m => m.grupo === gid));
+      loadTransacoesGrupo(gid, 1);
       const q = await api.get(`/grupos/${gid}/quem_deve_a_quem/`);
       setQuemDeve(q.data.membros || []);
       const o = await api.get(`/grupos/${gid}/orcamento_resumo/`);
@@ -235,6 +248,7 @@ export default function PainelGestor() {
                     {transacoes.length === 0 && <tr><td colSpan={3} className="p-3 text-gray-400 text-center">Nenhuma transação</td></tr>}
                   </tbody>
                 </table>
+                <Pagination page={transPage} pageSize={TRANS_PAGE_SIZE} count={transCount} onPageChange={(p) => loadTransacoesGrupo(grupoSel, p)} />
               </div>
             </div>
           )}

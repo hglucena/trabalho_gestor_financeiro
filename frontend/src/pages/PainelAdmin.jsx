@@ -3,26 +3,43 @@ import api from "../api/client";
 import { extrairErro } from "../api/erros";
 import { useAuth } from "../contexts/AuthContext";
 import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
+
+const PAGE_SIZE = 20;
 
 export default function PainelAdmin() {
   const { user } = useAuth();
   const [aba, setAba] = useState("usuarios");
   const [usuarios, setUsuarios] = useState([]);
+  const [usuariosPage, setUsuariosPage] = useState(1);
+  const [usuariosCount, setUsuariosCount] = useState(0);
   const [categorias, setCategorias] = useState([]);
+  const [categoriasPage, setCategoriasPage] = useState(1);
+  const [categoriasCount, setCategoriasCount] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTipo, setModalTipo] = useState("");
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({});
   const [msg, setMsg] = useState(null); // { tipo: "ok" | "erro", texto }
 
-  const loadUsuarios = useCallback(async () => {
-    try { const r = await api.get("/usuarios/"); setUsuarios(r.data.results || []); } catch { }
+  const loadUsuarios = useCallback(async (page = 1) => {
+    try {
+      const r = await api.get(`/usuarios/?page=${page}&page_size=${PAGE_SIZE}`);
+      setUsuarios(r.data.results || []);
+      setUsuariosCount(r.data.count || 0);
+      setUsuariosPage(page);
+    } catch { }
   }, []);
-  const loadCategorias = useCallback(async () => {
-    try { const r = await api.get("/categorias/"); setCategorias(r.data.results || []); } catch { }
+  const loadCategorias = useCallback(async (page = 1) => {
+    try {
+      const r = await api.get(`/categorias/?page=${page}&page_size=${PAGE_SIZE}`);
+      setCategorias(r.data.results || []);
+      setCategoriasCount(r.data.count || 0);
+      setCategoriasPage(page);
+    } catch { }
   }, []);
 
-  useEffect(() => { loadUsuarios(); loadCategorias(); }, [loadUsuarios, loadCategorias]);
+  useEffect(() => { loadUsuarios(1); loadCategorias(1); }, [loadUsuarios, loadCategorias]);
 
   const salvarUsuario = async () => {
     setMsg(null);
@@ -34,7 +51,7 @@ export default function PainelAdmin() {
       } else {
         await api.post("/usuarios/", dados);
       }
-      setModalOpen(false); setEditando(null); loadUsuarios();
+      setModalOpen(false); setEditando(null); loadUsuarios(editando ? usuariosPage : 1);
       setMsg({ tipo: "ok", texto: "Usuário salvo." });
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao salvar o usuário.") });
@@ -46,7 +63,7 @@ export default function PainelAdmin() {
     setMsg(null);
     try {
       await api.delete(`/usuarios/${u.id}/`);
-      loadUsuarios();
+      loadUsuarios(usuarios.length <= 1 && usuariosPage > 1 ? usuariosPage - 1 : usuariosPage);
       setMsg({ tipo: "ok", texto: `Usuário ${u.nome} excluído.` });
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao excluir o usuário.") });
@@ -61,7 +78,7 @@ export default function PainelAdmin() {
       } else {
         await api.post("/categorias/", form);
       }
-      setModalOpen(false); setEditando(null); loadCategorias();
+      setModalOpen(false); setEditando(null); loadCategorias(editando ? categoriasPage : 1);
       setMsg({ tipo: "ok", texto: "Categoria salva." });
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao salvar a categoria.") });
@@ -73,7 +90,7 @@ export default function PainelAdmin() {
     setMsg(null);
     try {
       await api.delete(`/categorias/${c.id}/`);
-      loadCategorias();
+      loadCategorias(categorias.length <= 1 && categoriasPage > 1 ? categoriasPage - 1 : categoriasPage);
       setMsg({ tipo: "ok", texto: `Categoria "${c.nome}" excluída.` });
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao excluir a categoria.") });
@@ -129,6 +146,7 @@ export default function PainelAdmin() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={usuariosPage} pageSize={PAGE_SIZE} count={usuariosCount} onPageChange={loadUsuarios} />
           </div>
         </div>
       )}
@@ -157,6 +175,7 @@ export default function PainelAdmin() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={categoriasPage} pageSize={PAGE_SIZE} count={categoriasCount} onPageChange={loadCategorias} />
           </div>
         </div>
       )}

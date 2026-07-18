@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
+import Pagination from "../components/Pagination";
+
+const TRANS_PAGE_SIZE = 20;
 
 function formatMoney(v) {
   return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -10,6 +13,8 @@ export default function PainelDependente() {
   const { user } = useAuth();
   const [mesadas, setMesadas] = useState([]);
   const [transacoes, setTransacoes] = useState([]);
+  const [transPage, setTransPage] = useState(1);
+  const [transCount, setTransCount] = useState(0);
   const [contas, setContas] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [metas, setMetas] = useState([]);
@@ -19,22 +24,29 @@ export default function PainelDependente() {
 
   const load = useCallback(async () => {
     try {
-      const [m, t, ct, cat, mt] = await Promise.all([
+      const [m, ct, cat, mt] = await Promise.all([
         api.get("/mesadas/"),
-        api.get("/transacoes/"),
         api.get("/contas/"),
         api.get("/categorias/"),
         api.get("/metas/"),
       ]);
       setMesadas(m.data.results || []);
-      setTransacoes(t.data.results || []);
       setContas(ct.data.results || []);
       setCategorias(cat.data.results || []);
       setMetas(mt.data.results || []);
     } catch { }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadTransacoes = useCallback(async (page = 1) => {
+    try {
+      const res = await api.get(`/transacoes/?page=${page}&page_size=${TRANS_PAGE_SIZE}`);
+      setTransacoes(res.data.results || []);
+      setTransCount(res.data.count || 0);
+      setTransPage(page);
+    } catch { }
+  }, []);
+
+  useEffect(() => { load(); loadTransacoes(1); }, [load, loadTransacoes]);
 
   const criarTransacao = async (e) => {
     e.preventDefault();
@@ -50,6 +62,7 @@ export default function PainelDependente() {
       setForm({ conta: "", categoria: "", valor: "", descricao: "" });
       setMsg("Gasto registrado!");
       load();
+      loadTransacoes(1);
     } catch (err) {
       const detail = err.response?.data?.detail || "Erro ao registrar gasto.";
       setMsg(typeof detail === "string" ? detail : JSON.stringify(detail));
@@ -78,6 +91,7 @@ export default function PainelDependente() {
       await api.post(`/metas/${meta.id}/aportar/`, { valor });
       setMsg(`Guardado em "${meta.nome}"! O valor saiu do saldo da mesada.`);
       load();
+      loadTransacoes(1);
     } catch (err) {
       const detail = err.response?.data?.detail || "Erro ao guardar.";
       setMsg(typeof detail === "string" ? detail : JSON.stringify(detail));
@@ -178,6 +192,7 @@ export default function PainelDependente() {
                 )}
               </tbody>
             </table>
+            <Pagination page={transPage} pageSize={TRANS_PAGE_SIZE} count={transCount} onPageChange={loadTransacoes} />
           </div>
         </div>
       </div>

@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import api from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
+
+const TRANS_PAGE_SIZE = 20;
 
 function formatMoney(v) {
   return Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -11,7 +14,10 @@ export default function PainelConsultor() {
   const { user } = useAuth();
   const [clientes, setClientes] = useState([]);
   const [clienteSel, setClienteSel] = useState(null);
+  const [clienteAtualId, setClienteAtualId] = useState(null);
   const [transacoes, setTransacoes] = useState([]);
+  const [transPage, setTransPage] = useState(1);
+  const [transCount, setTransCount] = useState(0);
   const [contas, setContas] = useState([]);
   const [recomendacoes, setRecomendacoes] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -28,15 +34,24 @@ export default function PainelConsultor() {
 
   useEffect(() => { loadClientes(); }, [loadClientes]);
 
+  const loadTransacoesCliente = useCallback(async (clienteId, page = 1) => {
+    try {
+      const res = await api.get(`/consultor/clientes/${clienteId}/transacoes/?page=${page}&page_size=${TRANS_PAGE_SIZE}`);
+      setTransacoes(res.data.results || []);
+      setTransCount(res.data.count || 0);
+      setTransPage(page);
+    } catch { }
+  }, []);
+
   const carregarCliente = async (clienteId) => {
     setClienteSel(clienteId);
+    setClienteAtualId(clienteId);
     try {
-      const [t, c, rec] = await Promise.all([
-        api.get(`/consultor/clientes/${clienteId}/transacoes/`),
+      const [c, rec] = await Promise.all([
         api.get(`/consultor/clientes/${clienteId}/contas/`),
         api.get("/recomendacoes/"),
       ]);
-      setTransacoes(t.data.results || []);
+      loadTransacoesCliente(clienteId, 1);
       setContas(c.data.results || []);
       setRecomendacoes((rec.data.results || []).filter(r => r.cliente === clienteId));
     } catch { }
@@ -45,12 +60,12 @@ export default function PainelConsultor() {
   const criarRecomendacao = async () => {
     try {
       await api.post("/recomendacoes/", {
-        cliente: clienteSel,
+        cliente: clienteAtualId,
         texto: form.texto,
       });
       setModalOpen(false);
       setMsg("Recomendação enviada!");
-      carregarCliente(clienteSel);
+      carregarCliente(clienteAtualId);
     } catch (e) {
       setMsg(e.response?.data?.detail || "Erro ao criar recomendação.");
     }
@@ -133,6 +148,7 @@ export default function PainelConsultor() {
                   {transacoes.length === 0 && <tr><td colSpan={4} className="p-3 text-gray-400 text-center">Nenhuma transação</td></tr>}
                 </tbody>
               </table>
+              <Pagination page={transPage} pageSize={TRANS_PAGE_SIZE} count={transCount} onPageChange={(p) => loadTransacoesCliente(clienteAtualId, p)} />
             </div>
           )}
 

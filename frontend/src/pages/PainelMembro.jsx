@@ -4,6 +4,9 @@ import api from "../api/client";
 import { extrairErro } from "../api/erros";
 import { useAuth } from "../contexts/AuthContext";
 import Modal from "../components/Modal";
+import Pagination from "../components/Pagination";
+
+const TRANS_PAGE_SIZE = 20;
 
 // Paleta categórica validada (CVD-safe, ordem fixa — dataviz)
 const COLORS = ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948", "#e87ba4", "#eb6834"];
@@ -18,6 +21,9 @@ export default function PainelMembro() {
   const [aba, setAba] = useState("contas");
   const [contas, setContas] = useState([]);
   const [transacoes, setTransacoes] = useState([]);
+  const [transacoesGrafico, setTransacoesGrafico] = useState([]);
+  const [transPage, setTransPage] = useState(1);
+  const [transCount, setTransCount] = useState(0);
   const [categorias, setCategorias] = useState([]);
   const [orcamentos, setOrcamentos] = useState([]);
   const [contasAPagar, setContasAPagar] = useState([]);
@@ -37,8 +43,18 @@ export default function PainelMembro() {
     } catch { }
   }, []);
 
+  const loadTransacoes = useCallback(async (page = 1) => {
+    try {
+      const res = await api.get(`/transacoes/?page=${page}&page_size=${TRANS_PAGE_SIZE}`);
+      setTransacoes(res.data.results || []);
+      setTransCount(res.data.count || 0);
+      setTransPage(page);
+    } catch { }
+  }, []);
+
   useEffect(() => { load("/contas/", setContas); }, [load]);
-  useEffect(() => { load("/transacoes/?page_size=100", setTransacoes); }, [load]);
+  useEffect(() => { loadTransacoes(1); }, [loadTransacoes]);
+  useEffect(() => { load("/transacoes/?page_size=100", setTransacoesGrafico); }, [load]);
   useEffect(() => { load("/categorias/", setCategorias); }, [load]);
   useEffect(() => { load("/orcamentos/", setOrcamentos); }, [load]);
   useEffect(() => { load("/contas-a-pagar/", setContasAPagar); }, [load]);
@@ -66,8 +82,13 @@ export default function PainelMembro() {
       }
       setModalOpen(false);
       setEditando(null);
-      load(endpoint === "/transacoes/" ? "/transacoes/?page_size=100" : endpoint, setters[endpoint]);
-      if (endpoint === "/transacoes/") load("/contas/", setContas); // saldo vivo
+      if (endpoint === "/transacoes/") {
+        loadTransacoes(editando ? transPage : 1);
+        load("/transacoes/?page_size=100", setTransacoesGrafico);
+        load("/contas/", setContas); // saldo vivo
+      } else {
+        load(endpoint, setters[endpoint]);
+      }
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao salvar.") });
     }
@@ -77,8 +98,13 @@ export default function PainelMembro() {
     if (!confirm("Confirmar exclusão?")) return;
     try {
       await api.delete(`${endpoint}${id}/`);
-      load(endpoint === "/transacoes/" ? "/transacoes/?page_size=100" : endpoint, setter);
-      if (endpoint === "/transacoes/") load("/contas/", setContas); // saldo vivo
+      if (endpoint === "/transacoes/") {
+        loadTransacoes(transacoes.length <= 1 && transPage > 1 ? transPage - 1 : transPage);
+        load("/transacoes/?page_size=100", setTransacoesGrafico);
+        load("/contas/", setContas); // saldo vivo
+      } else {
+        load(endpoint, setter);
+      }
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao excluir.") });
     }
@@ -110,7 +136,8 @@ export default function PainelMembro() {
         texto: `${importadas} transação(ões) importada(s) para a conta "${contas[0].nome}".` +
           (erros.length ? ` ${erros.length} linha(s) com erro: ${erros.map(e => `linha ${e.linha} (${e.erro})`).join("; ")}` : ""),
       });
-      load("/transacoes/?page_size=100", setTransacoes);
+      loadTransacoes(1);
+      load("/transacoes/?page_size=100", setTransacoesGrafico);
       load("/categorias/", setCategorias);
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao importar o CSV.") });
@@ -125,7 +152,8 @@ export default function PainelMembro() {
       await api.post(`/metas/${meta.id}/aportar/`, { valor });
       load("/metas/", setMetas);
       load("/contas/", setContas);
-      load("/transacoes/?page_size=100", setTransacoes);
+      loadTransacoes(transPage);
+      load("/transacoes/?page_size=100", setTransacoesGrafico);
     } catch (err) {
       setMsg({ tipo: "erro", texto: extrairErro(err, "Erro no aporte.") });
     }
@@ -161,7 +189,7 @@ export default function PainelMembro() {
   ];
 
   // Dados para gráfico — categorias em ordem de valor; além de 7, agrupa em "Outros"
-  const despesasPorCat = transacoes
+  const despesasPorCat = transacoesGrafico
     .filter(t => t.tipo === "despesa")
     .reduce((acc, t) => {
       const nome = t.nome_categoria || "Sem categoria";
@@ -297,6 +325,7 @@ export default function PainelMembro() {
                 {transacoes.length === 0 && <tr><td colSpan={6} className="p-3 text-gray-400 text-center">Nenhuma transação</td></tr>}
               </tbody>
             </table>
+            <Pagination page={transPage} pageSize={TRANS_PAGE_SIZE} count={transCount} onPageChange={loadTransacoes} />
           </div>
         </div>
       )}
@@ -375,7 +404,8 @@ export default function PainelMembro() {
                               await api.post(`/contas-a-pagar/${c.id}/pagar/`);
                               load("/contas-a-pagar/", setContasAPagar);
                               load("/contas/", setContas);
-                              load("/transacoes/?page_size=100", setTransacoes);
+                              loadTransacoes(1);
+                              load("/transacoes/?page_size=100", setTransacoesGrafico);
                               setMsg({ tipo: "ok", texto: `"${c.descricao}" paga — despesa lançada e saldo atualizado.` });
                             } catch (err) {
                               setMsg({ tipo: "erro", texto: extrairErro(err, "Erro ao pagar.") });
